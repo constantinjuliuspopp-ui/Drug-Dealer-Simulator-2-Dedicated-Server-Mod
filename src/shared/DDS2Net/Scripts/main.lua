@@ -283,42 +283,63 @@ local function LaunchSave(menuPC, alias)
     return ok
 end
 
-local autoload = { state = ROLE == "server" and WORLD ~= "" and "wait" or "off", since = 0, rendered = false }
+-- Ablauf: wait -> menu -> direct (RequestLaunchSavedGame) -> falls nach 20 s noch im Menü:
+-- ui-open ("Weiter" öffnen) -> ui-play ("Spielen" beim passenden Kartell) -> done
+local autoload = { state = ROLE == "server" and WORLD ~= "" and "wait" or "off", since = 0 }
+
+local CONTINUE_EVENT = "BndEvt__MainMenuWidget_btnContinue_K2Node_ComponentBoundEvent_8_OnButtonClickedEvent__DelegateSignature"
+local PLAY_EVENT = "BndEvt__OneCartelWidget_btnCartelPlay_K2Node_ComponentBoundEvent_0_OnButtonClickedEvent__DelegateSignature"
+
+local function SetLoadState(state)
+    autoload.state, autoload.since = state, os.time()
+end
 
 local function LoadTick(pc, place)
-    if autoload.state == "off" or autoload.state == "done" then return end
-    if place ~= "menu" then return end
-    if autoload.state == "wait" then
-        autoload.state, autoload.since = "menu", os.time()
-        Event("INFO", "Hauptmenü erreicht – suche Spielstand '" .. WORLD .. "'")
-        return
-    end
-    if os.time() - autoload.since < 4 then return end -- Menü erst fertig aufbauen lassen
-
-    local entries = SaveEntries()
-    if #entries == 0 and not autoload.rendered then
-        autoload.rendered = true
-        local menu = FirstLive("MainMenuWidget_C")
-        if menu then CallNamed(menu, "RenderSavedCartels", {}) end
-        return
-    end
-
-    local found = nil
-    local names = {}
-    for _, e in ipairs(entries) do
-        table.insert(names, (e.name or "?") .. " [" .. (e.alias or "?") .. "]")
-        if not found and Matches(e, WORLD) then found = e end
-    end
-    if #names > 0 then Event("INFO", "Spielstände im Menü: " .. table.concat(names, ", ")) end
-
-    autoload.state = "done"
-    if found and found.alias then
-        LaunchSave(pc, found.alias)
-    else
-        if #entries > 0 then
-            Event("WARN", "Kein Spielstand heißt '" .. WORLD .. "' – versuche den Namen direkt als Alias")
+    local s = autoload.state
+    if s == "off" or s == "done" then return end
+    if place ~= "menu" then
+        if s ~= "wait" and place ~= "loading" then
+            Event("INFO", "Hauptmenü verlassen – Welt wird geladen")
+            SetLoadState("done")
         end
+        return
+    end
+    local elapsed = os.time() - autoload.since
+
+    if s == "wait" then
+        SetLoadState("menu")
+        Event("INFO", "Hauptmenü erreicht – lade Spielstand '" .. WORLD .. "'")
+    elseif s == "menu" and elapsed >= 4 then -- Menü erst fertig aufbauen lassen
         LaunchSave(pc, WORLD)
+        SetLoadState("direct")
+    elseif s == "direct" and elapsed >= 20 then
+        Event("WARN", "Direktes Laden hat nicht gewirkt – versuche es über 'Weiter' im Menü")
+        local menu = FirstLive("MainMenuWidget_C")
+        local ok, err = false, "MainMenuWidget nicht gefunden"
+        if menu then ok, err = CallNamed(menu, CONTINUE_EVENT, {}) end
+        if not ok then Event("ERROR", "'Weiter' öffnen fehlgeschlagen: " .. tostring(err)) end
+        SetLoadState("ui-open")
+    elseif s == "ui-open" and elapsed >= 3 then
+        local found, names = nil, {}
+        for _, e in ipairs(SaveEntries()) do
+            table.insert(names, (e.name or "?") .. " [" .. (e.alias or "?") .. "]")
+            if not found and Matches(e, WORLD) then found = e end
+        end
+        Event("INFO", "Spielstände im Menü: " .. (#names > 0 and table.concat(names, ", ") or "keine"))
+        if not found then
+            Event("WARN", "Spielstand '" .. WORLD .. "' nicht im Menü gefunden – bitte im Spielfenster von Hand laden (Koop)")
+            SetLoadState("done")
+            return
+        end
+        -- Koop-Reiter wählen (Reihenfolge unbekannt: 1 = Koop angenommen), dann "Spielen"
+        local okTab = pcall(function() found.widget.CoopSwitcher:SwitchTabByIndex(1) end)
+        local ok, err, sig = CallNamed(found.widget, PLAY_EVENT, {})
+        Event(ok and "INFO" or "ERROR", ok and ("'Spielen' bei '" .. (found.name or WORLD) .. "' ausgelöst" .. (okTab and "" or " (Koop-Reiter nicht umgeschaltet)"))
+            or ("'Spielen' fehlgeschlagen: " .. tostring(err) .. " [Parameter: " .. sig .. "]"))
+        SetLoadState("ui-play")
+    elseif s == "ui-play" and elapsed >= 20 then
+        Event("WARN", "Welt startet nicht automatisch – bitte im Spielfenster von Hand laden (Koop)")
+        SetLoadState("done")
     end
 end
 
@@ -452,7 +473,7 @@ local function HandleCommand(line)
     elseif cmd == "start" then DoStart()
     elseif cmd == "load" then
         if arg ~= "" then WORLD = arg end
-        autoload.state, autoload.rendered = WORLD ~= "" and "wait" or "off", false
+        SetLoadState(WORLD ~= "" and "wait" or "off")
         Event("INFO", "Lade Welt '" .. WORLD .. "', sobald das Hauptmenü erreicht ist")
     elseif cmd == "call" then DoCall(arg)
     elseif cmd == "dump" then DoDump(arg)

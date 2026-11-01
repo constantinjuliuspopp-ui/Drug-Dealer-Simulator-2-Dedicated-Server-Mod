@@ -69,7 +69,7 @@ im Spiel den Spielstand laden und wie gewohnt ein Koop-Spiel starten.
    | `Port` | UDP-Port (Standard 7777) |
    | `MaxPlayers` | Spielerlimit inkl. Host (Spiel ist für 3 ausgelegt) |
    | `Password` | leer = kein Passwort |
-   | `World` | Name des Spielstands, wie er im Menü „Fortsetzen“ steht |
+   | `World` | Name der Welt (Ordner unter `SaveGames\Cartels`); bei nur einer Welt wird diese genommen |
    | `AutosaveMinutes` | Autosave-Intervall, 0 = aus |
    | `GameDir` | optional: Spielordner, falls nicht automatisch gefunden |
 
@@ -93,6 +93,29 @@ im Spiel den Spielstand laden und wie gewohnt ein Koop-Spiel starten.
 
    Logs liegen in `Dokumente\DDS2 Server\logs`. Weitere Einstellungen, z. B. den automatischen Lobby-Start,
    findest du in `<Spielordner>\DrugDealerSimulator2\Binaries\Win64\ue4ss\Mods\DDS2Net\config.txt`.
+
+### Server auf einem eigenen PC (empfohlen)
+
+Server und Mitspieler laufen auf **verschiedenen PCs**. Zwei Spiele auf demselben PC funktionieren nicht zuverlässig,
+weil Steam die zweite Instanz neu startet und die Mod dann nicht aktiv ist.
+
+**Auf dem Server-PC:**
+1. Steam und Drug Dealer Simulator 2 installieren. Der Server-PC braucht ein **eigenes Steam-Konto**, dem das Spiel gehört.
+   Mit demselben Konto wie ein Mitspieler geht es nicht, weil Steam ein Konto nur auf einem PC gleichzeitig spielen lässt.
+2. Spiel einmal starten und eine Welt anlegen („Neues Kartell“). Oder eine vorhandene Welt kopieren:
+   Ordner `%LOCALAPPDATA%\DrugDealerSimulator2\Saved\SaveGames\Cartels\<Name>` vom eigenen PC in denselben Pfad
+   auf dem Server-PC.
+3. `DDS2Mod-Server-Setup-<Version>.exe` installieren.
+4. In `Dokumente\DDS2 Server\server.cfg` bei `World=` den Namen der Welt eintragen. Der Ordnername unter `Cartels`
+   reicht. Gibt es nur eine Welt, nimmt der Server diese automatisch.
+5. Feste LAN-IP vergeben und für Spiele übers Internet **UDP 7777** im Router freigeben (siehe unten).
+6. **DDS2 Server** starten. Das Log zeigt die gefundenen Welten und meldet, wenn die Welt läuft.
+
+**Auf den PCs der Mitspieler:** `DDS2Mod-Client-Setup-<Version>.exe` installieren. In **DDS2 Multiplayer** die IP des
+Server-PCs eintragen: im Heimnetz die LAN-IP, z. B. `192.168.178.20`, übers Internet die öffentliche IP oder einen
+DynDNS-Namen. Dann auf **Verbinden** klicken.
+
+Der Host belegt einen Spielerplatz. Bei `MaxPlayers=3` können also zwei Mitspieler beitreten.
 
 **Wichtig zum Server-Modus:**
 - Das Spiel gibt es nur als normalen Client. Ein Server ohne Grafik ist deshalb nicht möglich. Die Server-Instanz ist ein
@@ -129,7 +152,8 @@ Dann hilft nur ein VPN wie ZeroTier/Tailscale/Radmin VPN. Darüber verbindet ihr
 | Spiel stürzt beim Start ab | Installer deinstallieren → prüfen, ob das Spiel ohne Mod läuft. Log: `…\Binaries\Win64\ue4ss\UE4SS.log` |
 | Steam-Koop geht nicht mehr | In DDS2 Multiplayer **Normal starten (Steam-Koop)** benutzen. |
 | Server: „keine neue Spielstand-Datei“ nach `save` | Das Spiel lässt nur in Abständen speichern. Später erneut versuchen oder im Spielfenster speichern. |
-| Server lädt die Welt nicht | `World` muss so heißen wie im Menü „Fortsetzen“. Das Server-Log zeigt die Liste „Spielstände im Menü“. |
+| Server lädt die Welt nicht | Das Server-Log zeigt beim Start „Spielstände: …“. Einen davon bei `World=` eintragen. |
+| Zweites Spiel auf demselben PC zeigt „Direkt-IP ist aus“ | Steam hat die zweite Instanz neu gestartet. Server und Mitspieler auf getrennten PCs betreiben. |
 | Kein „Server beitreten“ im Hauptmenü | Spiel über DDS2 Multiplayer starten. In `ue4ss\UE4SS.log` nach `[DDS2Net]` suchen. |
 
 Logs für Fehlerberichte:

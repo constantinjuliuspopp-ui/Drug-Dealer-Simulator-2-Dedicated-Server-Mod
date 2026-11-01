@@ -31,15 +31,6 @@ public static class GameProcess
         return newest is null ? null : (newest.Name, newest.LastWriteTimeUtc);
     }
 
-    /// <summary>Namen der Spielstand-Dateien (ohne Endung), nur zur Anzeige im Server-Log.</summary>
-    public static List<string> SaveFileNames()
-    {
-        var dir = Path.Combine(GameLocator.SavedDir, "SaveGames");
-        if (!Directory.Exists(dir)) return new();
-        return Directory.EnumerateFiles(dir, "*.sav", SearchOption.TopDirectoryOnly)
-            .Select(Path.GetFileNameWithoutExtension).OfType<string>().OrderBy(n => n).ToList();
-    }
-
     /// <summary>Normaler Start über Steam (ohne Mod-Einstellungen), z. B. für Steam-Koop.</summary>
     public static void LaunchViaSteam() =>
         Process.Start(new ProcessStartInfo($"steam://rungameid/{ModInfo.SteamAppId}") { UseShellExecute = true });

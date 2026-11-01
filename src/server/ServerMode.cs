@@ -78,13 +78,20 @@ public static class ServerMode
             gameArgs.AddRange(new[] { "-nullrhi", "-nosound" });
             Log("WARN", "Headless-Modus ist experimentell: die Welt muss automatisch laden, ohne Fenster kannst du nicht eingreifen.");
         }
-        var saves = GameProcess.SaveFileNames();
-        Log("INFO", saves.Count > 0 ? $"Spielstand-Dateien: {string.Join(", ", saves)}" : "Keine Spielstand-Dateien gefunden – zuerst im Spiel eine Welt anlegen.");
+        var cartels = SaveGames.ListCartels();
+        Log("INFO", cartels.Count > 0
+            ? $"Spielstände: {string.Join(", ", cartels.Select(c => c.Name == c.Alias ? c.Alias : $"{c.Name} [{c.Alias}]"))}"
+            : "Keine Spielstände gefunden.");
+        var world = SaveGames.Resolve(cfg.World, cartels, out var warning);
+        if (warning != null) Log("WARN", warning);
 
-        var game = GameProcess.Launch(gameDir, "server", ipc.Dir, gameArgs,
-            new Dictionary<string, string> { ["DDS2_WORLD"] = cfg.World });
-        Log("INFO", $"Spiel gestartet (PID {game.Id}). Die Welt '{cfg.World}' wird automatisch geladen, sobald das Hauptmenü erscheint.");
-        Log("INFO", "Klappt das nicht: Spielstand im Spielfenster von Hand laden (Koop) oder 'load <Name>' eingeben.");
+        var env = new Dictionary<string, string>();
+        if (world != null) env["DDS2_WORLD"] = world.Alias;
+        var game = GameProcess.Launch(gameDir, "server", ipc.Dir, gameArgs, env);
+        Log("INFO", $"Spiel gestartet (PID {game.Id}).");
+        Log("INFO", world != null
+            ? $"Die Welt '{world.Name}' wird automatisch geladen, sobald das Hauptmenü erscheint."
+            : "Keine Welt zum automatischen Laden – im Spielfenster von Hand laden (Koop) oder 'load <Name>' eingeben.");
         Log("INFO", "Befehle: status, kick <Name>, save, start, load <Welt>, stop, help");
 
         using var cts = new CancellationTokenSource();
@@ -202,8 +209,15 @@ public static class ServerMode
                 case "save": RequestSave(ipc); break;
                 case "start": ipc.Send("start"); break;
                 case "load":
-                    if (parts.Length < 2) Log("WARN", "Benutzung: load <Name des Spielstands>");
-                    else ipc.Send($"load {parts[1]}");
+                    if (parts.Length < 2) { Log("WARN", "Benutzung: load <Name des Spielstands>"); break; }
+                    var target = SaveGames.Resolve(parts[1], SaveGames.ListCartels(), out var loadWarning);
+                    if (target is null || !target.Alias.Equals(parts[1], StringComparison.OrdinalIgnoreCase)
+                            && !target.Name.Equals(parts[1], StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log("WARN", loadWarning ?? $"Kein Spielstand '{parts[1]}'.");
+                        break;
+                    }
+                    ipc.Send($"load {target.Alias}");
                     break;
                 case "call" or "dump":
                     // Diagnose für die Weiterentwicklung (siehe docs/test-0.2.md)

@@ -9,7 +9,7 @@ public sealed class ServerConfig
     public int Port { get; set; } = ModInfo.DefaultPort;
     public int MaxPlayers { get; set; } = 3;
     public string Password { get; set; } = "";
-    public string World { get; set; } = "MeineWelt";
+    public string World { get; set; } = "";
     public int AutosaveMinutes { get; set; } = 10;
     public bool Headless { get; set; }
     public string GameDir { get; set; } = "";

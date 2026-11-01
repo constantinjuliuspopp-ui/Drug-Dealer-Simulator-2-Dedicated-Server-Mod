@@ -8,7 +8,9 @@ Port=7777
 MaxPlayers=3
 # Leer lassen für keinen Passwortschutz.
 Password=
-# Name des Spielstands, den der Server lädt.
-World=MeineWelt
+# Welt, die der Server lädt: Ordnername unter
+# %LOCALAPPDATA%\DrugDealerSimulator2\Saved\SaveGames\Cartels (oder der Name im Spiel).
+# Leer = die zuletzt gespielte Welt.
+World=
 # Autosave-Intervall in Minuten, 0 = aus.
 AutosaveMinutes=10

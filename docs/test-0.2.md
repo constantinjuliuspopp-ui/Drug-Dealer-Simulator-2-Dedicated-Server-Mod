@@ -37,12 +37,16 @@ Falls nichts erscheint: in `ue4ss\UE4SS.log` nach `Menü` suchen und die Zeilen 
 
 ## T10 – Server lädt die Welt selbst
 
-1. In `Dokumente\DDS2 Server\server.cfg` bei `World=` den Namen deines Spielstands eintragen, so wie er
-   im Spiel unter „Fortsetzen“ steht.
+Ab 0.2.1: Server und Mitspieler auf **zwei verschiedenen PCs** testen. Jeder PC braucht ein eigenes Steam-Konto mit dem Spiel.
+
+1. In `Dokumente\DDS2 Server\server.cfg` bei `World=` den Ordnernamen der Welt eintragen
+   (`%LOCALAPPDATA%\DrugDealerSimulator2\Saved\SaveGames\Cartels\<Name>`). Leer lassen geht auch, dann nimmt der
+   Server die zuletzt gespielte Welt.
 2. **DDS2 Server** starten. Erwartete Log-Zeilen, nacheinander:
-   - `Hauptmenü erreicht – suche Spielstand '…'`
-   - `Spielstände im Menü: Name [alias], …`
+   - `Spielstände: …` (die gefundenen Welten)
+   - `Hauptmenü erreicht – lade Spielstand '…'`
    - `Lade Spielstand '…' als Koop-Host ...`
+   - Falls das nicht wirkt, nach 20 s: `versuche es über 'Weiter' im Menü` → `Spielstände im Menü: …` → `'Spielen' … ausgelöst`
    - `Lobby läuft als Host …` → nach ca. 8 s `Spielstart angefordert`
    - `Welt läuft als Host …`
 3. Bleibt es bei einem Schritt hängen: die letzten Log-Zeilen notieren und im Spielfenster nachsehen, was dort steht.
