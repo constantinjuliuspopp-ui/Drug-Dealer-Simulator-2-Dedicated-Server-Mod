@@ -4,6 +4,11 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+; /DVariant=Client oder /DVariant=Server: gleiches Setup, nur die vorausgewählte Installationsart
+; und der Dateiname unterscheiden sich.
+#ifndef Variant
+  #define Variant "Client"
+#endif
 #define StageDir "..\out\stage"
 #define AppExe "DDS2Mod.exe"
 
@@ -16,7 +21,7 @@ DefaultDirName={autopf}\DDS2 Multiplayer Mod
 DefaultGroupName=DDS2 Multiplayer Mod
 PrivilegesRequired=admin
 OutputDir=..\dist
-OutputBaseFilename=DDS2Mod-Setup-{#AppVersion}
+OutputBaseFilename=DDS2Mod-{#Variant}-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -30,8 +35,14 @@ SetupLogging=yes
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
 [Types]
+; Die erste Art ist vorausgewählt.
+#if Variant == "Server"
+Name: "full"; Description: "Client und Server-Modus"
+Name: "client"; Description: "Nur Client (auf Servern mitspielen, selbst hosten)"
+#else
 Name: "client"; Description: "Nur Client (auf Servern mitspielen, selbst hosten)"
 Name: "full"; Description: "Client und Server-Modus"
+#endif
 Name: "custom"; Description: "Benutzerdefiniert"; Flags: iscustom
 
 [Components]

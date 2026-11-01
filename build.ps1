@@ -39,6 +39,8 @@ if ($SkipInstaller) { Write-Host "Stage fertig: $stage"; return }
 $iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
     Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) nicht gefunden" }
-& $iscc "/DAppVersion=$version" "$root\installer\DDS2Mod.iss"
-if ($LASTEXITCODE) { throw "Inno Setup fehlgeschlagen" }
-Write-Host "Fertig: $root\dist\DDS2Mod-Setup-$version.exe" -ForegroundColor Green
+foreach ($variant in "Client", "Server") {
+    & $iscc /Q "/DAppVersion=$version" "/DVariant=$variant" "$root\installer\DDS2Mod.iss"
+    if ($LASTEXITCODE) { throw "Inno Setup fehlgeschlagen ($variant)" }
+    Write-Host "Fertig: $root\dist\DDS2Mod-$variant-Setup-$version.exe" -ForegroundColor Green
+}
