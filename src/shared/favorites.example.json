@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "favorites": [
+    { "name": "Lokaler Test", "host": "127.0.0.1", "port": 7777 },
+    { "name": "Server von Kumpel", "host": "dds2.example.org", "port": 7777 }
+  ]
+}

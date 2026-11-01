@@ -1,0 +1,14 @@
+# DDS2Net – Mod-Konfiguration (leer lassen = Standardwert)
+#
+# Speichern: Klasse und Funktion, die der Befehl "save" aufruft.
+# Standard ist der "Speichern"-Knopf des Pausemenüs.
+# SaveObjectClass=BP_DDS2_PlayerController_C
+# SaveFunction=RequestSaveCartelProgress
+SaveObjectClass=
+SaveFunction=
+
+# Server-Modus: Koop-Sitzung zusätzlich in der Steam-Sitzungsliste anzeigen (true/false)
+Advertise=
+
+# Server-Modus: in der Lobby automatisch "Spiel starten" auslösen (true/false, Standard true)
+AutoStartLobby=

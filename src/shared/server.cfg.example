@@ -1,0 +1,14 @@
+# DDS2 Multiplayer Mod – Server-Konfiguration
+# Kommandozeilen-Parameter (--port, --maxplayers, --world) überschreiben diese Werte.
+
+ServerName=Mein DDS2 Server
+Port=7777
+# Das Spiel ist für 3 Spieler ausgelegt. Höhere Werte sind experimentell.
+# Im Pseudo-Dedicated-Modus belegt der Host selbst einen Platz.
+MaxPlayers=3
+# Leer lassen für keinen Passwortschutz.
+Password=
+# Name des Spielstands, den der Server lädt.
+World=MeineWelt
+# Autosave-Intervall in Minuten, 0 = aus.
+AutosaveMinutes=10
