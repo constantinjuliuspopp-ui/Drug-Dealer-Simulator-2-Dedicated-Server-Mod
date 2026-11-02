@@ -1,7 +1,7 @@
 # Testplan Version 0.4 – Menü „Server beitreten“ im Design des Spiels
 
 Neu in 0.4: Der Menüpunkt sitzt jetzt in der Knopfliste des Hauptmenüs. Fenster, Knöpfe, Eingabefelder, Schriften und
-Klänge werden von den echten Widgets des Spiels übernommen. Fehler erscheinen als Popup des Spiels. Favoriten zeigen
+Klänge werden von den echten Widgets des Spiels übernommen (Vorlage: Fenster „Wähle Kartell“). Fehler stehen im Fenster. Favoriten zeigen
 Ping und Spielerzahl, und vor dem Verbinden prüft das Menü den Server.
 Die Tests aus [test-0.3.md](test-0.3.md) gelten weiter, besonders T14 (Server ohne Fenster).
 
@@ -34,18 +34,17 @@ Bitte bei jedem Test einen **Screenshot** machen (F12 in Steam oder Win+Shift+S)
 3. Server stoppen, Fenster schließen und wieder öffnen → nach ein paar Sekunden `OFFLINE`.
 4. Klick auf den Favoriten → „Prüfe …“ → „Verbinde mit …“ → Spiel lädt in die Welt des Servers.
 
-## T23 – Fehler als Popup des Spiels
+## T23 – Fehlermeldungen
 
-1. **Zeitüberschreitung:** Adresse `192.168.178.254` (ohne Server) → nach ca. 3 s Popup „SERVER ANTWORTET NICHT“.
+1. **Zeitüberschreitung:** Adresse `192.168.178.254` (ohne Server) → nach ca. 3 s Meldung „… antwortet nicht …“.
    Erneut **VERBINDEN** → versucht es trotzdem (dauert, dann Verbindungsfehler).
-2. **Passwort:** Server mit `Password=test`. Ohne Passwort → Popup „PASSWORT … passwortgeschützt“.
+2. **Passwort:** Server mit `Password=test`. Ohne Passwort → „Dieser Server ist passwortgeschützt …“.
    Mit `falsch` → „Falsches Passwort.“
 3. **Neues Passwort:** Mit `test` → Meldung „Das Passwort wird übernommen …“ → das Spiel beendet sich, startet neu und
    verbindet automatisch. Klappt das?
-4. **Voll** (optional): `MaxPlayers=1` am Server, zweiter Spieler versucht beizutreten → Popup „… voll …“.
-5. Wie sehen die Popups aus? Steht Überschrift und Text drin, gibt es einen OK-Knopf? Falls leer oder falsch:
-   Screenshot und `UE4SS.log` (Zeile `Spiel-Popup DisplayConfirmWidget(...)`) schicken. Abhilfe bis dahin:
-   `GamePopups=false` in `…\ue4ss\Mods\DDS2Net\config.txt`.
+4. **Voll** (optional): `MaxPlayers=1` am Server, zweiter Spieler versucht beizutreten → „… voll …“.
+5. Erscheint die Meldung rot unten im Fenster, mit Fehlerton?
+   (Das Popup des Spiels wird bewusst nicht benutzt: Der Aufruf aus Lua lässt das Spiel abstürzen.)
 
 ## T24 – ohne DDS2 Multiplayer
 
@@ -54,6 +53,6 @@ Bitte bei jedem Test einen **Screenshot** machen (F12 in Steam oder Win+Shift+S)
 
 ## Was du mir schickst
 
-- Screenshots von Hauptmenü, Fenster und einem Popup
+- Screenshots von Hauptmenü und Fenster mit einer Fehlermeldung
 - Ergebnisse T20–T24 (kurz)
 - `…\Binaries\Win64\ue4ss\UE4SS.log` vom Spieler-PC

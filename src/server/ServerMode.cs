@@ -190,6 +190,7 @@ public static class ServerMode
                 }
             }
             sawStatus |= _status != null;
+            Thread.Sleep(1500); // letzte Ereignisse der Mod (z. B. SHUTDOWN) noch einlesen lassen
             Log(_stopping ? "INFO" : "WARN", $"Spiel beendet (Exit-Code {game.ExitCode}).");
             _game = null;
 
@@ -296,7 +297,17 @@ public static class ServerMode
         while (!ct.IsCancellationRequested)
         {
             foreach (var e in _ipc!.ReadNewEvents())
+            {
+                if (e.Level == "SHUTDOWN")
+                {
+                    // Die Mod beendet das Spiel gewollt (stop über die Mod, quit) – kein Absturz, kein Neustart.
+                    _stopping = true;
+                    Interlocked.CompareExchange(ref _stopRequestedTicks, DateTime.UtcNow.Ticks, 0);
+                    Log("INFO", e.Text);
+                    continue;
+                }
                 Log(e.Level, ErrorTexts.IsError(e) ? ErrorTexts.Describe(e) : e.Text);
+            }
 
             var status = _ipc.ReadStatus();
             if (status is { IsStale: false })

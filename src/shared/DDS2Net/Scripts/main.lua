@@ -55,7 +55,6 @@ local Config = {
     SaveFunction = "RequestSaveCartelProgress",
     Advertise = "false",
     AutoStartLobby = "true",
-    GamePopups = "true",
 }
 do
     local f = io.open((ModDir() or ".") .. "\\config.txt", "r")
@@ -155,16 +154,27 @@ local function FindFunction(obj, name)
     return nil
 end
 
+local Menu -- menu.lua, wird weiter unten geladen
+
 local CPF_Parm, CPF_ReturnParm = 0x80, 0x400
 
 local function FunctionParams(fn)
     local list = {}
+    local inLocals = false
     fn:ForEachProperty(function(p)
+        if inLocals then return end
+        local name = p:GetFName():ToString()
         local okParm, isParm = pcall(function() return p:HasAnyPropertyFlags(CPF_Parm) end)
         if okParm and not isParm then return end
         local okRet, isRet = pcall(function() return p:HasAnyPropertyFlags(CPF_ReturnParm) end)
         if okRet and isRet then return end
-        table.insert(list, { name = p:GetFName():ToString(), type = p:GetClass():GetFName():ToString(), prop = p })
+        -- Ohne Property-Flags (manche UE4SS-Versionen): Parameter stehen vorn, danach kommen die
+        -- lokalen Blueprint-Variablen (CallFunc_…, K2Node_…, Temp_…) – ab da abbrechen.
+        if not okParm and (name:find("^CallFunc_") or name:find("^K2Node_") or name:find("^Temp_")) then
+            inLocals = true
+            return
+        end
+        table.insert(list, { name = name, type = p:GetClass():GetFName():ToString(), prop = p })
     end)
     return list
 end
@@ -433,7 +443,8 @@ end
 
 local function DoStop()
     local saving = DoSave()
-    Event("INFO", saving and "Server wird in 10 Sekunden beendet (Speichern läuft)" or "Server wird beendet")
+    -- SHUTDOWN: der Launcher/Server weiß dann, dass das Ende gewollt ist (kein Absturz)
+    Event("SHUTDOWN", saving and "Server wird in 10 Sekunden beendet (Speichern läuft)" or "Server wird beendet")
     if saving then
         ExecuteWithDelay(10000, function() ExecuteInGameThread(Quit) end)
     else
@@ -509,8 +520,10 @@ local function HandleCommand(line)
         Event("INFO", "Lade Welt '" .. WORLD .. "', sobald das Hauptmenü erreicht ist")
     elseif cmd == "quit" then
         -- Launcher startet das Spiel neu (z. B. neues Server-Passwort)
-        Event("INFO", "Spiel wird auf Wunsch von DDS2 Multiplayer beendet")
+        Event("SHUTDOWN", "Spiel wird auf Wunsch von DDS2 Multiplayer beendet")
         Quit()
+    elseif cmd == "menu" then
+        if Menu then Menu.Command(arg) else Event("WARN", "menu: Menü nicht geladen") end
     elseif cmd == "call" then DoCall(arg)
     elseif cmd == "dump" then DoDump(arg)
     else Event("WARN", "Unbekannter Befehl: " .. cmd) end
@@ -530,10 +543,23 @@ local function PollCommands()
     if not lastNewline then return end
     commandPos = commandPos + lastNewline
     for line in data:sub(1, lastNewline):gmatch("([^\r\n]+)") do
-        ExecuteInGameThread(function()
-            local ok, err = pcall(HandleCommand, line)
-            if not ok then Event("ERROR", "Befehl '" .. line .. "': " .. tostring(err)) end
-        end)
+        local ok, err = pcall(HandleCommand, line)
+        if not ok then Event("ERROR", "Befehl '" .. line .. "': " .. tostring(err)) end
+    end
+end
+
+-- Regelmäßig im Spiel-Thread ausführen. LoopInGameThreadWithDelay vermeidet den Umweg
+-- LoopAsync → ExecuteInGameThread, der im Test zeitweise alle Schleifen der Mod angehalten hat.
+local function GameLoop(ms, name, fn)
+    local function Step()
+        local ok, err = pcall(fn)
+        if not ok then Log(name .. ": " .. tostring(err)) end
+        return false
+    end
+    if LoopInGameThreadWithDelay then
+        LoopInGameThreadWithDelay(ms, Step)
+    else
+        LoopAsync(ms, function() ExecuteInGameThread(Step) return false end)
     end
 end
 
@@ -561,13 +587,14 @@ local function WriteStatus(pc, mode, place)
 end
 
 -- Menü "Server beitreten" ------------------------------------------------------
-local okMenu, Menu = pcall(require, "menu")
+local okMenu
+okMenu, Menu = pcall(require, "menu")
 if okMenu then
     local okInit, err = pcall(Menu.Init, {
         Log = Log, Event = Event, IsLive = IsLive, Kismet = Kismet, MakeText = MakeText,
         LocalController = LocalController, DefaultPort = DEFAULT_PORT,
         DirectIpActive = IPC_DIR ~= nil, IpcDir = IPC_DIR, ToStr = ToStr,
-        CallNamed = CallNamed, GamePopups = Config.GamePopups ~= "false",
+        CallNamed = CallNamed, GameLoop = GameLoop,
     })
     if not okInit then
         Log("Menü deaktiviert: " .. tostring(err))
@@ -613,17 +640,7 @@ end
 
 if IPC_DIR then
     Event("INFO", "DDS2Net " .. MOD_VERSION .. " geladen (" .. ROLE .. ")")
-    LoopAsync(500, function()
-        local ok, err = pcall(PollCommands)
-        if not ok then Log("PollCommands: " .. tostring(err)) end
-        return false
-    end)
+    GameLoop(500, "PollCommands", PollCommands)
 end
 
-LoopAsync(2000, function()
-    ExecuteInGameThread(function()
-        local ok, err = pcall(Tick)
-        if not ok then Log("Tick: " .. tostring(err)) end
-    end)
-    return false
-end)
+GameLoop(2000, "Tick", Tick)

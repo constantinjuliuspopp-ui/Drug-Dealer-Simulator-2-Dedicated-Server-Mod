@@ -13,6 +13,3 @@ Advertise=
 # Server-Modus: in der Lobby automatisch "Spiel starten" auslösen (true/false, Standard true)
 AutoStartLobby=
 
-# Fehlermeldungen im Hauptmenü zusätzlich als Popup des Spiels anzeigen (true/false, Standard true).
-# Auf false setzen, falls das Popup leer oder falsch aussieht – die Meldung steht dann nur im Menü.
-GamePopups=

@@ -13,7 +13,7 @@ Inoffizielle Fan-Mod, nicht von den Entwicklern des Spiels.
 | Server per IP/Hostname + Port beitreten | ✅ im Programm **DDS2 Multiplayer** oder im Spielmenü |
 | Favoriten mit Name, IP, Port, **Ping und Spielerzahl** | ✅ `%APPDATA%\DDS2Mod\favorites.json` |
 | Prüfung vor dem Verbinden: Zeitüberschreitung, Versionskonflikt, Server voll, falsches Passwort | ✅ über den Abfrage-Port des Servers |
-| Menüpunkt **„SERVER BEITRETEN“** im Hauptmenü, im Design des Spiels | ✅ Knopf, Fenster, Schriften, Klänge und Popups vom Spiel übernommen (zu testen) |
+| Menüpunkt **„SERVER BEITRETEN“** im Hauptmenü, im Design des Spiels | ✅ Knopf, Fenster (wie „Wähle Kartell“), Schriften und Klänge vom Spiel übernommen – im Spiel geprüft |
 | Im Spielmenü: Favoriten mit Ping/Spielerzahl, Prüfung vor dem Verbinden, Passwort | ✅ solange **DDS2 Multiplayer** geöffnet ist |
 | **Dedicated Server** `DDS2Server.exe` mit Konsole, ohne Spielfenster | ✅ Spiel läuft ohne Grafik als Host (zu testen) |
 | Server-Befehle `status`, `players`, `kick`, `save`, `stop` | ✅ |
@@ -63,14 +63,14 @@ gesicherte Dateien zurückgelegt, die Configs und Firewall-Regeln zurückgesetzt
 **Oder direkt im Spiel:** In DDS2 Multiplayer auf **Mit Mod starten** klicken und das Programm offen lassen.
 Im Hauptmenü des Spiels steht unter „Kartell beitreten“ der neue Punkt **SERVER BEITRETEN** (auch Taste **F8**).
 Es öffnet sich ein Fenster im Stil des Spiels:
-- **Adresse** eintippen (z. B. `192.168.178.20` oder `server.example.org:7777`), ggf. **Passwort**, dann **VERBINDEN**
-  oder **Enter**.
+- **IP / Hostname** eintippen (z. B. `192.168.178.20` oder `server.example.org`), **Port** (vorausgefüllt mit 7777)
+  und ggf. **Passwort**, dann **VERBINDEN** oder **Enter**.
 - Darunter deine **Favoriten** mit Ping, Spielerzahl und Status – anklicken zum Verbinden.
-- Fehler (Zeitüberschreitung, Versionskonflikt, Server voll, falsches Passwort) erscheinen als Popup des Spiels und
-  unten im Fenster. Bei „antwortet nicht“ verbindet ein zweiter Klick trotzdem.
+- Fehler (Zeitüberschreitung, Versionskonflikt, Server voll, falsches Passwort) erscheinen rot im Fenster, mit dem
+  Fehlerton des Spiels. Bei „antwortet nicht“ verbindet ein zweiter Klick trotzdem.
 - Ein **neues Passwort** übernimmt das Spiel nur beim Start: Ist es richtig, startet das Spiel einmal neu und
   verbindet dann automatisch.
-- **Esc** oder ein Klick daneben schließt das Fenster.
+- **ABBRECHEN**, **Esc** oder ein Klick auf den Hintergrund schließt das Fenster.
 
 **Normal starten (Steam-Koop)** startet das Spiel ohne Mod-Einstellungen – dann funktionieren
 Steam-Einladungen wie gewohnt.
@@ -216,7 +216,6 @@ Dann hilft das **Relay** (siehe oben), ein VPN wie ZeroTier/Tailscale/Radmin VPN
 | Spiel stürzt beim Start ab | Deinstallieren → läuft das Spiel ohne Mod? Log: `…\Binaries\Win64\ue4ss\UE4SS.log` |
 | Kein „SERVER BEITRETEN“ im Hauptmenü | Spiel über DDS2 Multiplayer starten. In `ue4ss\UE4SS.log` nach `Menü` suchen; dort steht, welche Vorlagen gefunden wurden. Notfalls Taste F8. |
 | Menüpunkt steht oben rechts statt in der Liste | Die Knopfliste des Spiels wurde nicht erkannt. `UE4SS.log` (Zeilen mit `Menü`) schicken. |
-| Popup des Spiels ist leer oder sieht falsch aus | In `…\ue4ss\Mods\DDS2Net\config.txt` `GamePopups=false` setzen; die Meldung steht dann nur im Fenster. |
 | Im Spielmenü: „Prüfe …“ dauert und verbindet dann ohne Prüfung | DDS2 Multiplayer wurde geschlossen. Offen lassen, solange du spielst. |
 | Steam-Koop geht nicht mehr | In DDS2 Multiplayer **Normal starten (Steam-Koop)** benutzen. |
 | Relay: „antwortet nicht“ / „falscher Relay-Schlüssel“ / „Uhrzeit weicht ab“ | Läuft DDS2Relay, ist UDP 7779 offen? Schlüssel genau übernehmen. Uhrzeit synchronisieren. Mehr in `README-Relay.md`. |

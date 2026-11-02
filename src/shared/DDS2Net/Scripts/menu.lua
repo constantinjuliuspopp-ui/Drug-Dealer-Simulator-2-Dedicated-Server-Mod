@@ -7,7 +7,8 @@
       btnCartelApply/-Cancel  Vorlage für die Knöpfe im Fenster (wie im Fenster "Neues Kartell")
       InputSessionSearch      Vorlage für das Adressfeld, InputPassword für das Passwortfeld
       JoinHolder …            Vorlage für den Fensterrahmen
-    Fehlermeldungen erscheinen zusätzlich im Popup des Spiels (BP_MainMenuPC_C:DisplayConfirmWidget).
+    Fehlermeldungen stehen im Fenster (Fehlerton des Spiels). Das Popup des Spiels
+    (BlueprintHelpersLib:DisplayConfirmWidget) lässt sich aus Lua nicht aufrufen – das Spiel stürzt ab.
     Klappt eine Vorlage nicht, gibt es einen schlichten Ersatz; ganz ohne Hauptmenü-Knöpfe erscheint
     der Menüpunkt oben rechts. Taste F8 öffnet/schließt immer.
 
@@ -39,7 +40,6 @@ local VISIBLE, COLLAPSED, SELF_HIT_TEST_INVISIBLE = 0, 1, 4
 local COLOR_ERROR = { R = 0.95, G = 0.32, B = 0.25, A = 1.0 }
 local COLOR_TEXT = { R = 0.92, G = 0.92, B = 0.92, A = 1.0 }
 local COLOR_DIM = { R = 0.55, G = 0.55, B = 0.55, A = 1.0 }
-local ACTION_ERROR = "DDS2NET-INFO"
 local SOUND_ERROR = "/Game/Audio/Sounds/UI/NotificationNeg.NotificationNeg"
 local SOUND_OPEN = "/Game/Audio/Sounds/UI/HintPopup.HintPopup"
 
@@ -71,6 +71,34 @@ end
 local function ClassName(o)
     local ok, n = pcall(function() return o:GetClass():GetFName():ToString() end)
     return ok and type(n) == "string" and n or ""
+end
+
+-- UE4SS liefert bei jedem Zugriff ein neues Lua-Objekt: Identität über die Adresse (bzw. den vollen Namen) prüfen.
+local function Identity(o)
+    local ok, a = pcall(function() return o:GetAddress() end)
+    if ok and a then return a end
+    local okN, n = pcall(function() return o:GetFullName() end)
+    return okN and n or nil
+end
+
+local function IsOurs(w)
+    local ok, n = pcall(function() return w:GetFName():ToString() end)
+    return ok and type(n) == "string" and n:find("^DDS2Net_") ~= nil
+end
+
+-- Eigene Widgets aus einer früheren Einfügung entfernen (z. B. nach Neuladen der Mod).
+local function RemoveOurs(panel)
+    local okN, n = pcall(function() return panel:GetChildrenCount() end)
+    if not okN or type(n) ~= "number" then return 0 end
+    local removed = 0
+    for i = n - 1, 0, -1 do
+        local ok, ch = pcall(function() return panel:GetChildAt(i) end)
+        if ok and Valid(ch) and IsOurs(ch) then
+            pcall(function() panel:RemoveChild(ch) end)
+            removed = removed + 1
+        end
+    end
+    return removed
 end
 
 local function Hovered(w)
@@ -141,6 +169,8 @@ local function StyleText(dst, src, size, color)
             styled = Try("Schrift", function() dst:SetFont(src.Font) end)
         end
         if not color then Try("Textfarbe", function() dst:SetColorAndOpacity(src.ColorAndOpacity) end) end
+        -- Das Spiel schreibt Menütexte klein und lässt sie per TextTransformPolicy groß anzeigen.
+        Try("Schreibweise", function() dst:SetTextTransformPolicy(src.TextTransformPolicy) end)
         Try("Textschatten", function()
             dst:SetShadowOffset(src.ShadowOffset)
             dst:SetShadowColorAndOpacity(src.ShadowColorAndOpacity)
@@ -181,6 +211,7 @@ local function MakeButton(tree, srcBtn, text, size, content)
     if Valid(srcBtn) then
         Try("Knopf-Innenabstand", function()
             local s = srcBtn:GetContentSlot()
+            if not Valid(s) or not Valid(slot) then return end
             slot:SetPadding(s.Padding)
             slot:SetHorizontalAlignment(s.HorizontalAlignment)
             slot:SetVerticalAlignment(s.VerticalAlignment)
@@ -189,13 +220,60 @@ local function MakeButton(tree, srcBtn, text, size, content)
     return b, label
 end
 
+-- Eigenschaft (FProperty) eines Objekts suchen, auch in Oberklassen.
+local function FindProperty(obj, name)
+    local found
+    pcall(function()
+        local cls = obj:GetClass()
+        for _ = 1, 20 do
+            if found or not Valid(cls) then break end
+            cls:ForEachProperty(function(p)
+                if not found and p:GetFName():ToString() == name then found = p end
+            end)
+            cls = cls:GetSuperStruct()
+        end
+    end)
+    return found
+end
+
+local SIMPLE_PROPS = {
+    BoolProperty = true, ByteProperty = true, Int8Property = true, IntProperty = true, Int64Property = true,
+    UInt16Property = true, UInt32Property = true, FloatProperty = true, DoubleProperty = true,
+    EnumProperty = true, NameProperty = true, ObjectProperty = true,
+}
+
+-- Struktur-Wert in eine Lua-Tabelle kopieren (UE4SS kann Strukturen nur aus Tabellen zuweisen).
+local function StructToTable(value, struct, depth)
+    local t = {}
+    struct:ForEachProperty(function(p)
+        local name = p:GetFName():ToString()
+        local ptype = p:GetClass():GetFName():ToString()
+        local ok, v = pcall(function() return value[name] end)
+        if not ok or v == nil then return end
+        if ptype == "StructProperty" then
+            if depth < 6 then
+                local okS, sub = pcall(function() return StructToTable(v, p:GetStruct(), depth + 1) end)
+                if okS then t[name] = sub end
+            end
+        elseif ptype == "ObjectProperty" then
+            if Valid(v) then t[name] = v end
+        elseif SIMPLE_PROPS[ptype] then
+            t[name] = v
+        end
+    end)
+    return t
+end
+
+-- Struktur-Eigenschaft von src nach dst kopieren (für Widgets ohne Setter, z. B. EditableTextBox.WidgetStyle).
+local function CopyStruct(dst, src, name)
+    local prop = FindProperty(src, name)
+    if not prop then error("Eigenschaft " .. name .. " nicht gefunden") end
+    dst[name] = StructToTable(src[name], prop:GetStruct(), 0)
+end
+
 local function MakeInput(tree, src, hint, password)
     local e = New("EditableTextBox", tree)
-    if Valid(src) then
-        if not pcall(function() e:SetStyle(src.WidgetStyle) end) then
-            Try("Eingabefeld-Stil", function() e.WidgetStyle = src.WidgetStyle end)
-        end
-    end
+    if Valid(src) then Try("Eingabefeld-Stil", function() CopyStruct(e, src, "WidgetStyle") end) end
     pcall(function() e:SetHintText(ctx.MakeText(hint)) end)
     if password then pcall(function() e:SetIsPassword(true) end) end
     return e
@@ -270,31 +348,15 @@ local function PlaySound(path)
     end)
 end
 
--- Popup des Spiels (wie "Server voll" beim Steam-Beitritt), nur mit OK-Knopf.
-local function GamePopup(title, text)
-    if not ctx.GamePopups then return false end
-    local pc = ctx.LocalController()
-    if not Valid(pc) or ClassName(pc) ~= "BP_MainMenuPC_C" then return false end
-    local ok, err, sig = ctx.CallNamed(pc, "DisplayConfirmWidget", {
-        Querier = pc, ActionStringID = ACTION_ERROR,
-        PopupTitle = title, PopupDescription = text,
-        InformativeOnly = true, ShowCancelButton = false, ShowTextInput = false, ShowQuantitySelect = false,
-        QuantityDefault = 1, QuantityMax = 1, TimeoutAvailable = false,
-    })
-    Warn("popupsig", "Spiel-Popup DisplayConfirmWidget(" .. tostring(sig) .. ") -> " .. (ok and "ok" or tostring(err)))
-    return ok
-end
-
 -- Status / Fehler -------------------------------------------------------------
 local function SetStatus(s, isError)
     lastStatus = { text = s, isError = isError }
     if ui then SetLabel(ui.status, s, isError and COLOR_ERROR or nil) end
 end
 
-local function ShowError(text, title)
+local function ShowError(text, _title)
     SetStatus(text, true)
     PlaySound(SOUND_ERROR)
-    GamePopup(title or "VERBINDUNG FEHLGESCHLAGEN", text)
 end
 
 -- Fenster öffnen/schließen -----------------------------------------------------
@@ -361,7 +423,7 @@ local function MakeRow(tree, cells, srcText, srcBtn, isHeader)
     local box = New("HorizontalBox", tree)
     local labels = {}
     for i, width in ipairs(COLUMNS) do
-        local t = Label(tree, cells[i] or "", srcText, 18, isHeader and COLOR_DIM or nil)
+        local t = Label(tree, cells[i] or "", srcText, nil, isHeader and COLOR_DIM or nil)
         labels[i] = t
         AddH(box, Sized(tree, t, width), i == 1 and 0 or 8)
     end
@@ -506,112 +568,212 @@ local function CheckPending()
 end
 
 local function ConnectTyped()
-    local host, port = TextOf(ui.address):match("^%s*([^:%s]+):?(%d*)%s*$")
-    RequestJoin(host, tonumber(port))
+    -- Port aus dem eigenen Feld; "host:port" im Adressfeld geht weiterhin und hat Vorrang.
+    local host, inlinePort = TextOf(ui.address):match("^%s*([^:%s]+):?(%d*)%s*$")
+    local port = tonumber(inlinePort) or tonumber((TextOf(ui.port):match("^%s*(%d+)%s*$")))
+    if port and (port < 1 or port > 65535) then port = nil end
+    RequestJoin(host, port)
 end
 
 -- Aufbau ------------------------------------------------------------------------
+-- Widget mit diesem Namen unterhalb von w suchen (auch nicht als Variable veröffentlichte Widgets).
+local function FindByName(w, name, depth)
+    depth = depth or 0
+    if not Valid(w) or depth > 12 then return nil end
+    local ok, n = pcall(function() return w:GetFName():ToString() end)
+    if ok and n == name then return w end
+    local okC, c = pcall(function() return w:GetContent() end)
+    if okC and Valid(c) then
+        local r = FindByName(c, name, depth + 1)
+        if r then return r end
+    end
+    local okN, count = pcall(function() return w:GetChildrenCount() end)
+    if okN and type(count) == "number" then
+        for i = 0, count - 1 do
+            local okI, ch = pcall(function() return w:GetChildAt(i) end)
+            if okI then
+                local r = FindByName(ch, name, depth + 1)
+                if r then return r end
+            end
+        end
+    end
+    return nil
+end
+
+-- Vorlage ist das Fenster "Wähle Kartell" (ContinueHolder) des Hauptmenüs, Build 23009320:
+--   BackgroundBlur, Image (Vollbild-Hintergrund), BgTopLeft_1/BgTopRight_1 (Ecken),
+--   TextBlock_7 (Titel), TextBlock_8 (Untertitel), Image_612 + SearchCartelInput (Suchfeld), btnContinueCancel ("Storno").
 local function Sources(menu)
     local main = Field(menu, "btnJoinCartel") or Field(menu, "btnNewCartel") or Field(menu, "btnSettings") or Field(menu, "btnContinue")
+    local cont = Field(menu, "ContinueHolder")
+    local function InCont(name) return cont and FindByName(cont, name) or nil end
     local apply = Field(menu, "btnCartelApply") or main
-    local frame
-    for _, n in ipairs({ "JoinHolder", "NewCartelHolder", "ContinueHolder" }) do
-        local holder = Field(menu, n)
-        frame = holder and FindDescendant(holder, { Border = true, Image = true })
-        if frame then break end
-    end
     return {
         main = main,
         mainText = main and FirstText(main),
         apply = apply,
-        cancel = Field(menu, "btnCartelCancel") or apply,
-        input = Field(menu, "InputSessionSearch") or Field(menu, "InputCartelName"),
-        password = Field(menu, "InputPassword") or Field(menu, "InputSessionSearch"),
-        body = Field(menu, "txtNoSessions") or Field(menu, "txtHostName") or Field(menu, "txtSessionDesc"),
-        frame = frame,
+        cancel = Field(menu, "btnContinueCancel") or Field(menu, "btnCartelCancel") or apply,
+        blur = InCont("BackgroundBlur"),
+        background = InCont("Image"),
+        cornerLeft = InCont("BgTopLeft_1"),
+        cornerRight = InCont("BgTopRight_1"),
+        title = InCont("TextBlock_7") or (main and FirstText(main)),
+        subtitle = InCont("TextBlock_8") or Field(menu, "txtNoSessions"),
+        inputBg = InCont("Image_612"),
+        input = Field(menu, "SearchCartelInput"),
     }
 end
 
-local function Frame(tree, src)
-    local frame = New("Border", tree)
-    local copied = false
-    if Valid(src) then
-        if ClassName(src) == "Border" then
-            copied = Try("Fensterrahmen", function()
-                frame:SetBrush(src.Background)
-                frame:SetBrushColor(src.BrushColor)
-            end)
-        else
-            copied = Try("Fensterrahmen", function()
-                frame:SetBrush(src.Brush)
-                frame:SetBrushColor(src.ColorAndOpacity)
-            end)
+-- Bild wie die Vorlage (Brush, Farbe) und – in einer CanvasPanel – an derselben Stelle.
+local function CopyImage(tree, canvas, src, z)
+    if not Valid(src) then return nil end
+    local img = New("Image", tree)
+    Try("Bild", function()
+        img:SetBrush(src.Brush)
+        img:SetColorAndOpacity(src.ColorAndOpacity)
+    end)
+    -- Deckkraft inkl. der Container darüber (die Vorlage ist teilweise durchsichtig)
+    Try("Bild-Deckkraft", function()
+        local opacity, w = 1.0, src
+        for _ = 1, 4 do
+            if not Valid(w) then break end
+            opacity = opacity * (w:GetRenderOpacity() or 1.0)
+            w = w:GetParent()
         end
-    end
-    if not copied then pcall(function() frame:SetBrushColor({ R = 0.02, G = 0.02, B = 0.02, A = 0.94 }) end) end
-    pcall(function() frame:SetPadding({ Left = 40, Top = 30, Right = 40, Bottom = 30 }) end)
-    return frame
+        img:SetRenderOpacity(opacity)
+    end)
+    local slot = canvas:AddChild(img)
+    Try("Bild-Position", function()
+        local s = src.Slot
+        if not Valid(s) or ClassName(s) ~= "CanvasPanelSlot" then error("keine CanvasPanelSlot") end
+        slot:SetAnchors(s:GetAnchors())
+        slot:SetOffsets(s:GetOffsets())
+        slot:SetAlignment(s:GetAlignment())
+        slot:SetAutoSize(s:GetAutoSize())
+    end)
+    pcall(function() slot:SetZOrder(z) end)
+    return img
+end
+
+-- Eingabefeld wie das Suchfeld des Spiels: Hintergrundbild + EditableText mit dessen Stil.
+local function Input(tree, src, hint, width, password, text)
+    local frame = New("Border", tree)
+    local copied = Valid(src.inputBg) and Try("Feld-Hintergrund", function()
+        frame:SetBrush(src.inputBg.Brush)
+        frame:SetBrushColor(src.inputBg.ColorAndOpacity)
+    end)
+    if not copied then pcall(function() frame:SetBrushColor({ R = 0, G = 0, B = 0, A = 0.85 }) end) end
+    pcall(function() frame:SetPadding({ Left = 10, Top = 4, Right = 10, Bottom = 4 }) end)
+    pcall(function() frame:SetVerticalAlignment(2) end)
+    local e = New("EditableText", tree)
+    if Valid(src.input) then Try("Eingabefeld-Stil", function() CopyStruct(e, src.input, "WidgetStyle") end) end
+    pcall(function() e:SetHintText(ctx.MakeText(hint)) end)
+    if password then pcall(function() e:SetIsPassword(true) end) end
+    if text then pcall(function() e:SetText(ctx.MakeText(text)) end) end
+    frame:SetContent(e)
+    local box = New("SizeBox", tree)
+    pcall(function() box:SetWidthOverride(width) end)
+    pcall(function() box:SetHeightOverride(32) end)
+    box:SetContent(frame)
+    return e, box
+end
+
+-- Beschriftete Spalte (Überschrift klein und groß geschrieben wie im Spiel, darunter das Feld).
+local function Column(tree, src, caption, child)
+    local col = New("VerticalBox", tree)
+    AddV(col, Label(tree, UpperDE(caption), src.subtitle, nil, COLOR_DIM), 0)
+    AddV(col, child, 4)
+    return col
 end
 
 local function BuildWindow(menu, w, src)
     local tree = menu.WidgetTree
     local root = tree.RootWidget
 
-    -- abgedunkelter, unscharfer Hintergrund; Klick darauf schließt das Fenster
+    -- Vollbild-Fenster wie "Wähle Kartell"
+    w.window = New("CanvasPanel", tree)
+    local winSlot = root:AddChild(w.window)
+    pcall(function()
+        winSlot:SetAnchors({ Minimum = { X = 0, Y = 0 }, Maximum = { X = 1, Y = 1 } })
+        winSlot:SetOffsets({ Left = 0, Top = 0, Right = 0, Bottom = 0 })
+        winSlot:SetZOrder(1000)
+    end)
+
+    -- unscharfer Hintergrund; ein Klick darauf (neben den Inhalt) schließt das Fenster
     w.blur = New("BackgroundBlur", tree)
-    pcall(function() w.blur:SetBlurStrength(8) end)
-    pcall(function() w.blur:SetBrushColor({ R = 0, G = 0, B = 0, A = 0.55 }) end)
-    local blurSlot = root:AddChild(w.blur)
+    local blurStrength = 10
+    if Valid(src.blur) then pcall(function() blurStrength = src.blur.BlurStrength end) end
+    pcall(function() w.blur:SetBlurStrength(blurStrength) end)
+    if not Valid(src.background) then pcall(function() w.blur:SetBrushColor({ R = 0, G = 0, B = 0, A = 0.6 }) end) end
+    local blurSlot = w.window:AddChild(w.blur)
     pcall(function()
         blurSlot:SetAnchors({ Minimum = { X = 0, Y = 0 }, Maximum = { X = 1, Y = 1 } })
         blurSlot:SetOffsets({ Left = 0, Top = 0, Right = 0, Bottom = 0 })
-        blurSlot:SetZOrder(1000)
+    end)
+    local bg = CopyImage(tree, w.window, src.background, 1)
+    if bg then pcall(function() bg:SetVisibility(3) end) end -- HitTestInvisible: Klicks gehen an den Blur
+    for _, corner in ipairs({ src.cornerLeft, src.cornerRight }) do
+        local img = CopyImage(tree, w.window, corner, 2)
+        if img then pcall(function() img:SetVisibility(3) end) end
+    end
+
+    local body = New("VerticalBox", tree)
+    local bodySlot = w.window:AddChild(body)
+    pcall(function()
+        bodySlot:SetAnchors({ Minimum = { X = 0.5, Y = 0 }, Maximum = { X = 0.5, Y = 0 } })
+        bodySlot:SetAlignment({ X = 0.5, Y = 0 })
+        bodySlot:SetPosition({ X = 0, Y = 24 })
+        bodySlot:SetAutoSize(true)
+        bodySlot:SetZOrder(3)
     end)
 
-    w.window = Frame(tree, src.frame)
-    local body = New("VerticalBox", tree)
-    w.window:SetContent(body)
-
-    AddV(body, Label(tree, LikeSource(src.mainText, "Server beitreten"), src.mainText, nil), 0)
-    AddV(body, Label(tree, "IP-Adresse oder Hostname, optional mit :Port (Standard " .. ctx.DefaultPort .. ")", src.body, 18, COLOR_DIM), 6)
+    local center = 2 -- HAlign_Center
+    AddV(body, Label(tree, "Server beitreten", src.title, nil), 0, center)
+    AddV(body, Label(tree, "Adresse des Servers eingeben und verbinden – oder einen Favoriten anklicken", src.subtitle, nil), 4, center)
 
     local inputs = New("HorizontalBox", tree)
-    w.address = MakeInput(tree, src.input, "z. B. 192.168.178.20 oder server.example.org:7777", false)
-    w.password = MakeInput(tree, src.password, "Passwort (falls nötig)", true)
-    AddH(inputs, Sized(tree, w.address, 520), 0)
-    AddH(inputs, Sized(tree, w.password, 260), 16)
-    AddV(body, inputs, 14)
+    local addressBox, portBox, passwordBox
+    w.address, addressBox = Input(tree, src, "z. B. 192.168.178.20 oder server.example.org", 380, false)
+    w.port, portBox = Input(tree, src, tostring(ctx.DefaultPort), 100, false, tostring(ctx.DefaultPort))
+    w.password, passwordBox = Input(tree, src, "falls nötig", 220, true)
+    AddH(inputs, Column(tree, src, "IP / Hostname", addressBox), 0)
+    AddH(inputs, Column(tree, src, "Port", portBox), 16)
+    AddH(inputs, Column(tree, src, "Passwort", passwordBox), 16)
+    AddV(body, inputs, 22, center)
 
-    local buttons = New("HorizontalBox", tree)
     w.connect = MakeButton(tree, src.apply, "Verbinden")
-    w.cancel = MakeButton(tree, src.cancel, "Abbrechen")
-    AddH(buttons, w.connect, 0)
-    AddH(buttons, w.cancel, 16)
-    AddV(body, buttons, 16)
+    AddV(body, w.connect, 18, center)
 
-    AddV(body, Label(tree, LikeSource(src.mainText, "Favoriten"), src.body, 20, COLOR_DIM), 26)
-    AddV(body, (MakeRow(tree, { "NAME", "ADRESSE", "PING", "SPIELER", "STATUS" }, src.body, nil, true)), 6)
+    AddV(body, Label(tree, UpperDE("Favoriten"), src.title, 16), 30, center)
+    AddV(body, (MakeRow(tree, { "NAME", "ADRESSE", "PING", "SPIELER", "STATUS" }, src.subtitle, nil, true)), 8)
     w.favBox = New("VerticalBox", tree)
     AddV(body, w.favBox, 2)
-    w.noFavs = Label(tree, "", src.body, 18, COLOR_DIM)
-    AddV(body, w.noFavs, 4)
+    w.noFavs = Label(tree, "", src.subtitle, nil, COLOR_DIM)
+    AddV(body, w.noFavs, 4, center)
     w.rows = {}
 
     if not ctx.DirectIpActive then
-        AddV(body, Label(tree, "Hinweis: Spiel über \"DDS2 Multiplayer\" starten, sonst ist Direkt-IP aus.", src.body, 18, COLOR_ERROR), 14)
+        AddV(body, Label(tree, "Hinweis: Spiel über \"DDS2 Multiplayer\" starten, sonst ist Direkt-IP aus.", src.subtitle, nil, COLOR_ERROR), 14, center)
     end
-    w.status = Label(tree, "", src.body, 18)
-    AddV(body, w.status, 14)
+    -- Statuszeile mit fester Breite und Umbruch, damit lange Fehlermeldungen die Tabelle nicht verschieben
+    w.status = Label(tree, "", src.subtitle, nil)
+    pcall(function() w.status:SetAutoWrapText(true) end)
+    pcall(function() w.status:SetJustification(1) end) -- ETextJustify::Center
+    AddV(body, Sized(tree, w.status, 820), 14, center)
 
-    local slot = root:AddChild(w.window)
+    -- "Abbrechen" unten mittig wie "Storno"
+    w.cancel = MakeButton(tree, src.cancel, "Abbrechen")
+    local cancelSlot = w.window:AddChild(w.cancel)
     pcall(function()
-        slot:SetAnchors({ Minimum = { X = 0.5, Y = 0.5 }, Maximum = { X = 0.5, Y = 0.5 } })
-        slot:SetAlignment({ X = 0.5, Y = 0.5 })
-        slot:SetAutoSize(true)
-        slot:SetZOrder(1001)
+        cancelSlot:SetAnchors({ Minimum = { X = 0.5, Y = 1 }, Maximum = { X = 0.5, Y = 1 } })
+        cancelSlot:SetAlignment({ X = 0.5, Y = 1 })
+        cancelSlot:SetPosition({ X = 0, Y = -36 })
+        cancelSlot:SetAutoSize(true)
+        cancelSlot:SetZOrder(3)
     end)
+
     w.tree = tree
-    w.srcBody = src.body
+    w.srcBody = src.subtitle
     w.srcRow = src.cancel
 end
 
@@ -638,6 +800,8 @@ local function BuildEntry(menu, w, src)
                 end)
                 item:SetContent(w.entry)
             end
+            local stale = RemoveOurs(parent)
+            if stale > 0 then ctx.Log("Menü: " .. stale .. " alte(r) Menüpunkt(e) entfernt") end
             local ok, inserted = pcall(InsertAfter, parent, anchor, item)
             if ok and inserted then
                 w.entryInMenu = true
@@ -668,11 +832,12 @@ local function Build(menu)
         return nil
     end
     local src = Sources(menu)
-    local w = { menu = menu }
+    local w = { menu = menu, menuId = Identity(menu) }
+    RemoveOurs(root)
     BuildEntry(menu, w, src)
     BuildWindow(menu, w, src)
     local missing = {}
-    for _, k in ipairs({ "main", "apply", "cancel", "input", "password", "body", "frame" }) do
+    for _, k in ipairs({ "main", "apply", "cancel", "blur", "background", "cornerLeft", "cornerRight", "title", "subtitle", "inputBg", "input" }) do
         if not src[k] then table.insert(missing, k) end
     end
     ctx.Log("Menü \"Server beitreten\" eingefügt (" .. (w.entryInMenu and "in der Knopfliste" or "oben rechts")
@@ -687,7 +852,7 @@ function M.Tick()
         ui = nil
         return
     end
-    if ui and ui.menu == menu and Valid(ui.entry) then return end
+    if ui and ui.menuId == Identity(menu) and Valid(ui.entry) then return end
     local ok, result = pcall(Build, menu)
     if not ok or not result then
         ctx.Log("Menü konnte nicht gebaut werden: " .. tostring(result))
@@ -698,6 +863,60 @@ function M.Tick()
     favText = nil
     SetOpen(isOpen)
     if lastStatus then SetStatus(lastStatus.text, lastStatus.isError) end
+end
+
+-- Widget-Baum als Text (Diagnose zum Nachbauen von Fenstern des Spiels)
+local function DescribeTree(w, depth, out)
+    if not Valid(w) or depth > 12 then return end
+    local cls = ClassName(w)
+    local okN, name = pcall(function() return w:GetFName():ToString() end)
+    local info = {}
+    -- Achtung: Methoden auf leeren Objekten (nullptr) bringen UE4SS zum Absturz – pcall hilft da nicht. Immer erst Valid().
+    local function ObjName(o) return Valid(o) and o:GetFName():ToString() or "-" end
+    pcall(function() if cls == "TextBlock" then table.insert(info, "text='" .. w:GetText():ToString() .. "' size=" .. tostring(w.Font.Size) .. " transform=" .. tostring(w.TextTransformPolicy)) end end)
+    pcall(function() if cls == "Image" then table.insert(info, "brush=" .. ObjName(w.Brush.ResourceObject) .. " draw=" .. tostring(w.Brush.DrawAs)) end end)
+    pcall(function() if cls == "Border" then table.insert(info, "brush=" .. ObjName(w.Background.ResourceObject)) end end)
+    pcall(function() table.insert(info, "vis=" .. tostring(w:GetVisibility())) end)
+    pcall(function()
+        local s = w.Slot
+        if Valid(s) and ClassName(s) == "CanvasPanelSlot" then
+            local o = s:GetOffsets()
+            table.insert(info, string.format("offs=%.0f,%.0f,%.0f,%.0f", o.Left, o.Top, o.Right, o.Bottom))
+        end
+    end)
+    table.insert(out, string.rep("  ", depth) .. cls .. " " .. (okN and name or "?") .. "  " .. table.concat(info, " "))
+    local okC, c = pcall(function() return w:GetContent() end)
+    if okC and Valid(c) and cls ~= "Button" then DescribeTree(c, depth + 1, out) return end
+    local okK, n = pcall(function() return w:GetChildrenCount() end)
+    if okK and type(n) == "number" then
+        for i = 0, n - 1 do
+            local okI, ch = pcall(function() return w:GetChildAt(i) end)
+            if okI then DescribeTree(ch, depth + 1, out) end
+        end
+    end
+end
+
+-- Diagnose über commands.txt: "menu open", "menu close", "menu join <adresse>", "menu tree <Feld des Hauptmenüs>"
+function M.Command(arg)
+    local sub, rest = (arg or ""):match("^(%S*)%s*(.-)$")
+    if not ui then
+        ctx.Event("WARN", "menu: Hauptmenü nicht offen")
+    elseif sub == "tree" then
+        local target = rest == "" and ui.menu.WidgetTree.RootWidget or Field(ui.menu, rest)
+        local out = {}
+        DescribeTree(target, 0, out)
+        local path = ctx.IpcDir .. "\\tree-" .. (rest ~= "" and rest or "root") .. ".txt"
+        local f = io.open(path, "w")
+        if f then f:write(table.concat(out, "\n") .. "\n") f:close() end
+        ctx.Event("INFO", "menu tree: " .. #out .. " Widgets -> " .. path)
+    elseif sub == "open" then SetOpen(true)
+    elseif sub == "close" then SetOpen(false)
+    elseif sub == "join" then
+        local host, port = rest:match("^%s*([^:%s]+):?(%d*)%s*$")
+        RequestJoin(host, tonumber(port))
+    else
+        ctx.Event("WARN", "menu: open | close | join <adresse>")
+    end
 end
 
 function M.ShowError(text)
@@ -711,7 +930,6 @@ local function Pump()
         anim.step = anim.step + 1
         local t = math.min(anim.step / 5, 1)
         pcall(function() ui.window:SetRenderOpacity(t) end)
-        pcall(function() ui.window:SetRenderScale({ X = 0.96 + 0.04 * t, Y = 0.96 + 0.04 * t }) end)
         if t >= 1 then anim = nil end
     end
     if ctx.IpcDir then CheckPending() end
@@ -750,13 +968,8 @@ function M.Init(context)
         end
         if Hovered(ui.blur) then SetOpen(false) end
     end))
-    LoopAsync(60, function()
-        ExecuteInGameThread(function()
-            if not ui then return end
-            local ok, err = pcall(Pump)
-            if not ok then Warn("pump", tostring(err)) end
-        end)
-        return false
+    ctx.GameLoop(100, "Menü", function()
+        if ui then Pump() end
     end)
 end
 
