@@ -4,13 +4,9 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
-; /DVariant=Client oder /DVariant=Server: gleiches Setup, nur die vorausgewählte Installationsart
-; und der Dateiname unterscheiden sich.
-#ifndef Variant
-  #define Variant "Client"
-#endif
 #define StageDir "..\out\stage"
 #define AppExe "DDS2Mod.exe"
+#define ServerExe "DDS2Server.exe"
 
 [Setup]
 AppId={{131AE2D8-9C98-4DE9-A7F1-E2E0299CF0C0}
@@ -21,7 +17,7 @@ DefaultDirName={autopf}\DDS2 Multiplayer Mod
 DefaultGroupName=DDS2 Multiplayer Mod
 PrivilegesRequired=admin
 OutputDir=..\dist
-OutputBaseFilename=DDS2Mod-{#Variant}-Setup-{#AppVersion}
+OutputBaseFilename=DDS2Mod-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -36,42 +32,50 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
 [Types]
 ; Die erste Art ist vorausgewählt.
-#if Variant == "Server"
-Name: "full"; Description: "Client und Server-Modus"
-Name: "client"; Description: "Nur Client (auf Servern mitspielen, selbst hosten)"
-#else
-Name: "client"; Description: "Nur Client (auf Servern mitspielen, selbst hosten)"
-Name: "full"; Description: "Client und Server-Modus"
-#endif
+Name: "client"; Description: "Client-Mod – auf Servern mitspielen oder selbst hosten"
+Name: "server"; Description: "Dedicated Server – dieser PC ist der Server"
+Name: "full"; Description: "Beides (Client-Mod und Dedicated Server)"
 Name: "custom"; Description: "Benutzerdefiniert"; Flags: iscustom
 
 [Components]
-Name: "client"; Description: "Client-Mod (UE4SS, DDS2Net-Mod, DDS2 Multiplayer)"; Types: client full custom; Flags: fixed
-Name: "server"; Description: "Server-Modus (Ordner Dokumente\DDS2 Server, Desktop-Verknüpfung)"; Types: full
+Name: "mod"; Description: "Mod im Spielordner (UE4SS + DDS2Net, wird von beiden Arten gebraucht)"; Types: client server full custom; Flags: fixed
+Name: "client"; Description: "DDS2 Multiplayer (Launcher: Server beitreten, Favoriten, hosten)"; Types: client full
+Name: "server"; Description: "Dedicated Server (DDS2Server.exe, Ordner Dokumente\DDS2 Server, SteamCMD-Skript)"; Types: server full
 
 [Tasks]
-Name: "desktopicon"; Description: "Desktop-Verknüpfung für DDS2 Multiplayer anlegen"
+Name: "desktopicon"; Description: "Desktop-Verknüpfungen anlegen"
+Name: "firewall"; Description: "Windows-Firewall: eingehende UDP-Verbindungen zum Server erlauben (Spiel und Abfrage-Port)"; Components: server
 
 [Files]
 Source: "{#StageDir}\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#StageDir}\game\*"; DestDir: "{code:GameWin64}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#StageDir}\server\server.cfg"; DestDir: "{code:ServerDir}"; Components: server; Flags: onlyifdoesntexist uninsneveruninstall
+Source: "{#StageDir}\server\install_server.bat"; DestDir: "{code:ServerDir}"; Components: server; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\DDS2 Multiplayer"; Filename: "{app}\{#AppExe}"
-Name: "{group}\DDS2 Server starten"; Filename: "{app}\{#AppExe}"; Parameters: "--server --config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Components: server
+Name: "{group}\DDS2 Multiplayer"; Filename: "{app}\{#AppExe}"; Components: client
+Name: "{group}\DDS2 Server starten"; Filename: "{app}\{#ServerExe}"; Parameters: "--config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Components: server
 Name: "{group}\Server-Ordner öffnen"; Filename: "{code:ServerDir}"; Components: server
+Name: "{group}\Spiel per SteamCMD aktualisieren"; Filename: "{code:ServerDir}\install_server.bat"; WorkingDir: "{code:ServerDir}"; Components: server
 Name: "{group}\Anleitung"; Filename: "{app}\README.md"
 Name: "{group}\DDS2 Multiplayer deinstallieren"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\DDS2 Multiplayer"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
-Name: "{autodesktop}\DDS2 Server"; Filename: "{app}\{#AppExe}"; Parameters: "--server --config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Components: server
+Name: "{autodesktop}\DDS2 Multiplayer"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon; Components: client
+Name: "{autodesktop}\DDS2 Server"; Filename: "{app}\{#ServerExe}"; Parameters: "--config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Tasks: desktopicon; Components: server
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "DDS2 Multiplayer jetzt starten"; Flags: postinstall nowait skipifsilent runasoriginaluser
+; Firewall-Regeln erst löschen (Update), dann neu anlegen. Gelten nur für die beiden Programme, nicht für Ports allgemein.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DDS2 Server - Spiel"""; Flags: runhidden; Tasks: firewall
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DDS2 Server - Abfrage"""; Flags: runhidden; Tasks: firewall
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""DDS2 Server - Spiel"" dir=in action=allow protocol=UDP program=""{code:ShippingExe}"""; Flags: runhidden; Tasks: firewall
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""DDS2 Server - Abfrage"" dir=in action=allow protocol=UDP program=""{app}\{#ServerExe}"""; Flags: runhidden; Tasks: firewall
+Filename: "{app}\{#AppExe}"; Description: "DDS2 Multiplayer jetzt starten"; Flags: postinstall nowait skipifsilent runasoriginaluser; Components: client
+Filename: "{code:ServerDir}"; Description: "Server-Ordner öffnen (server.cfg anpassen)"; Flags: postinstall shellexec nowait skipifsilent runasoriginaluser; Components: server
 
 [UninstallRun]
 ; Benutzer-Configs des Spiels (Engine.ini/Game.ini) aus dem Backup wiederherstellen.
 Filename: "{app}\{#AppExe}"; Parameters: "--restore"; Flags: runhidden waituntilterminated; RunOnceId: "RestoreIni"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DDS2 Server - Spiel"""; Flags: runhidden; RunOnceId: "FwGame"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DDS2 Server - Abfrage"""; Flags: runhidden; RunOnceId: "FwQuery"
 
 [UninstallDelete]
 Type: files; Name: "{app}\gamedir.txt"
@@ -174,13 +178,20 @@ begin
 end;
 
 procedure InitializeWizard;
+var
+  Found: String;
 begin
   GameDirPage := CreateInputDirPage(wpSelectComponents, 'Spielordner',
     'Wo ist Drug Dealer Simulator 2 installiert?',
-    'Der Ordner wurde automatisch über Steam gesucht. Falls er nicht stimmt, wähle den Ordner, in dem DrugDealerSimulator2.exe liegt.',
+    'Der Ordner wurde automatisch über Steam gesucht. Falls er nicht stimmt, wähle den Ordner, in dem DrugDealerSimulator2.exe liegt.'
+    + ' Für einen Server, dessen Spiel per SteamCMD installiert wurde (install_server.bat), dessen Ordner wählen, z. B. C:\DDS2Server\game.',
     False, '');
   GameDirPage.Add('Spielordner:');
-  GameDirPage.Values[0] := GetPreviousData('GameDir', FindGameDir());
+  Found := FindGameDir();
+  // Per install_server.bat (SteamCMD) installiertes Spiel
+  if (Found = '') and FileExists(ExpandConstant('{sd}\DDS2Server\game\DrugDealerSimulator2.exe')) then
+    Found := ExpandConstant('{sd}\DDS2Server\game');
+  GameDirPage.Values[0] := GetPreviousData('GameDir', Found);
 end;
 
 procedure RegisterPreviousData(PreviousDataKey: Integer);
@@ -210,6 +221,11 @@ begin
   Result := AddBackslash(GameDirPage.Values[0]) + 'DrugDealerSimulator2\Binaries\Win64';
 end;
 
+function ShippingExe(Param: String): String;
+begin
+  Result := GameWin64('') + '\DrugDealerSimulator2-Win64-Shipping.exe';
+end;
+
 function ServerDir(Param: String): String;
 begin
   Result := ExpandConstant('{userdocs}\DDS2 Server');
@@ -232,7 +248,7 @@ begin
   if LoadStringFromFile(ExpandConstant('{app}\start_server.bat.template'), Content) then
   begin
     Script := String(Content);
-    StringChangeEx(Script, '@DDS2MOD_EXE@', ExpandConstant('{app}\{#AppExe}'), True);
+    StringChangeEx(Script, '@DDS2SERVER_EXE@', ExpandConstant('{app}\{#ServerExe}'), True);
     SaveStringToFile(ServerDir('') + '\start_server.bat', AnsiString(Script), False);
   end;
 end;

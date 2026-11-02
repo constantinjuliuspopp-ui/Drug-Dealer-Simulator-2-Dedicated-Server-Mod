@@ -7,12 +7,20 @@ public sealed class ServerConfig
 {
     public string ServerName { get; set; } = "Mein DDS2 Server";
     public int Port { get; set; } = ModInfo.DefaultPort;
-    public int MaxPlayers { get; set; } = 3;
+    /// <summary>Mitspieler ohne den Server selbst (der Server ist im Spiel technisch der Host und belegt einen Platz mehr).</summary>
+    public int MaxPlayers { get; set; } = 2;
     public string Password { get; set; } = "";
     public string World { get; set; } = "";
     public int AutosaveMinutes { get; set; } = 10;
-    public bool Headless { get; set; }
+    /// <summary>Spiel ohne Fenster/Grafik starten; scheitert das, startet der Server es einmal mit kleinem Fenster.</summary>
+    public bool Headless { get; set; } = true;
+    /// <summary>0 = Spielport + 1.</summary>
+    public int QueryPort { get; set; }
+    /// <summary>Spiel nach einem Absturz automatisch neu starten.</summary>
+    public bool AutoRestart { get; set; } = true;
     public string GameDir { get; set; } = "";
+
+    public int EffectiveQueryPort => QueryPort > 0 ? QueryPort : ServerQuery.DefaultQueryPort(Port);
 
     public static ServerConfig Load(string path)
     {
@@ -31,7 +39,7 @@ public sealed class ServerConfig
         return cfg;
     }
 
-    /// <summary>--port 7777 --maxplayers 4 --world "X" --password Y --headless</summary>
+    /// <summary>--port 7777 --maxplayers 4 --world "X" --password Y --headless / --windowed</summary>
     public void ApplyArgs(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
@@ -41,6 +49,7 @@ public sealed class ServerConfig
             var key = a[2..].ToLowerInvariant();
             if (key is "server" or "config") { if (key == "config") i++; continue; }
             if (key == "headless") { Headless = true; continue; }
+            if (key == "windowed") { Headless = false; continue; }
             if (i + 1 >= args.Length) throw new FormatException($"Wert für {a} fehlt");
             Set(key, args[++i], a);
         }
@@ -52,15 +61,24 @@ public sealed class ServerConfig
         {
             case "servername": ServerName = value; break;
             case "port": Port = ParseInt(value, 1, 65535, where); break;
-            case "maxplayers": MaxPlayers = ParseInt(value, 1, 16, where); break;
+            case "maxplayers": MaxPlayers = ParseInt(value, 1, 15, where); break;
             case "password": Password = value; break;
             case "world": World = value; break;
             case "autosaveminutes": AutosaveMinutes = ParseInt(value, 0, 1440, where); break;
-            case "headless": Headless = value is "1" or "true" or "True"; break;
+            case "headless": Headless = ParseBool(value, where); break;
+            case "queryport": QueryPort = ParseInt(value, 0, 65535, where); break;
+            case "autorestart": AutoRestart = ParseBool(value, where); break;
             case "gamedir": GameDir = value; break;
             default: throw new FormatException($"{where}: unbekannte Einstellung '{key}'");
         }
     }
+
+    static bool ParseBool(string value, string where) => value.ToLowerInvariant() switch
+    {
+        "1" or "true" or "ja" or "an" => true,
+        "0" or "false" or "nein" or "aus" or "" => false,
+        _ => throw new FormatException($"{where}: '{value}' ist weder true noch false"),
+    };
 
     static int ParseInt(string value, int min, int max, string where)
     {

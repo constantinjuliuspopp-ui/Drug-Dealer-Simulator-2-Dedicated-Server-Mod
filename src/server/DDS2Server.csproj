@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DDS2Server.exe: Konsolenprogramm für den Dedicated Server (startet das Spiel ohne Fenster als Host). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DDS2Mod</RootNamespace>
+    <AssemblyName>DDS2Server</AssemblyName>
+    <Product>DDS2 Multiplayer Mod – Server</Product>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\shared\*.cs" Link="shared\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\shared\version.json" LogicalName="DDS2Mod.version.json" />
+  </ItemGroup>
+
+</Project>

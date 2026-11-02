@@ -10,7 +10,11 @@ public sealed class ClientForm : Form
 {
     static readonly TimeSpan ConnectTimeout = TimeSpan.FromMinutes(3);
 
-    readonly ListBox _favorites = new() { Dock = DockStyle.Fill, IntegralHeight = false };
+    readonly ListView _favorites = new()
+    {
+        Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false,
+        HeaderStyle = ColumnHeaderStyle.Nonclickable,
+    };
     readonly TextBox _name = new() { Dock = DockStyle.Fill };
     readonly TextBox _host = new() { Dock = DockStyle.Fill, PlaceholderText = "z. B. 192.168.178.20 oder server.example.org" };
     readonly NumericUpDown _port = new() { Minimum = 1, Maximum = 65535, Value = ModInfo.DefaultPort, Width = 90 };
@@ -20,6 +24,8 @@ public sealed class ClientForm : Form
     readonly Button _steam = new() { Text = "Normal starten (Steam-Koop)", AutoSize = true };
     readonly Button _saveFavorite = new() { Text = "Als Favorit speichern", AutoSize = true };
     readonly Button _removeFavorite = new() { Text = "Favorit entfernen", AutoSize = true };
+    readonly Button _refresh = new() { Text = "Aktualisieren", AutoSize = true };
+    readonly System.Windows.Forms.Timer _refreshTimer = new() { Interval = 30_000 };
     readonly Label _status = new() { Dock = DockStyle.Fill, AutoSize = false, Text = "Bereit." };
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
 
@@ -34,8 +40,8 @@ public sealed class ClientForm : Form
     public ClientForm()
     {
         Text = $"DDS2 Multiplayer {ModInfo.Version}";
-        MinimumSize = new Size(720, 420);
-        Size = new Size(780, 460);
+        MinimumSize = new Size(900, 440);
+        Size = new Size(1000, 480);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9.5f);
 
@@ -48,7 +54,7 @@ public sealed class ClientForm : Form
         AddRow(fields, "Passwort", _password);
 
         var favButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-        favButtons.Controls.AddRange(new Control[] { _saveFavorite, _removeFavorite });
+        favButtons.Controls.AddRange(new Control[] { _saveFavorite, _removeFavorite, _refresh });
         var mainButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         mainButtons.Controls.AddRange(new Control[] { _connect, _hostGame, _steam });
 
@@ -64,9 +70,14 @@ public sealed class ClientForm : Form
 
         var left = new GroupBox { Text = "Favoriten", Dock = DockStyle.Fill };
         left.Controls.Add(_favorites);
+        _favorites.Columns.Add("Name", 130);
+        _favorites.Columns.Add("Adresse", 140);
+        _favorites.Columns.Add("Ping", 55, HorizontalAlignment.Right);
+        _favorites.Columns.Add("Spieler", 55, HorizontalAlignment.Right);
+        _favorites.Columns.Add("Status", 70);
 
         var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(10) };
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 470));
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         split.Controls.Add(left);
         split.Controls.Add(right);
@@ -75,6 +86,9 @@ public sealed class ClientForm : Form
 
         _favorites.SelectedIndexChanged += (_, _) => FillFromFavorite();
         _favorites.DoubleClick += async (_, _) => await ConnectAsync();
+        _refresh.Click += async (_, _) => await RefreshServerInfoAsync();
+        _refreshTimer.Tick += async (_, _) => await RefreshServerInfoAsync();
+        Shown += async (_, _) => { _refreshTimer.Start(); await RefreshServerInfoAsync(); };
         _saveFavorite.Click += (_, _) => SaveFavorite();
         _removeFavorite.Click += (_, _) => RemoveFavorite();
         _connect.Click += async (_, _) => await ConnectAsync();
@@ -105,13 +119,54 @@ public sealed class ClientForm : Form
     {
         _favorites.BeginUpdate();
         _favorites.Items.Clear();
-        foreach (var f in _favoriteList) _favorites.Items.Add(f);
+        foreach (var f in _favoriteList)
+            _favorites.Items.Add(new ListViewItem(new[] { f.Name, $"{f.Host}:{f.Port}", "", "", "…" }) { Tag = f });
         _favorites.EndUpdate();
+    }
+
+    Favorite? SelectedFavorite => _favorites.SelectedItems.Count > 0 ? _favorites.SelectedItems[0].Tag as Favorite : null;
+
+    bool _refreshing;
+
+    /// <summary>Fragt alle Favoriten parallel über den Abfrage-Port ab (Ping, Spieler, Zustand).</summary>
+    async Task RefreshServerInfoAsync()
+    {
+        if (_refreshing || _favorites.Items.Count == 0) return;
+        _refreshing = true;
+        try
+        {
+            var items = _favorites.Items.Cast<ListViewItem>().ToList();
+            await Task.WhenAll(items.Select(async item =>
+            {
+                var f = (Favorite)item.Tag!;
+                var ep = await ResolveAsync(f.Host, f.EffectiveQueryPort);
+                var info = ep is null ? null : await ServerQuery.QueryAsync(ep, attempts: 2);
+                if (item.ListView is null) return; // Liste wurde inzwischen neu aufgebaut
+                item.SubItems[2].Text = info is null ? "–" : $"{info.Ping} ms";
+                item.SubItems[3].Text = info is null ? "–" : $"{info.Players}/{info.MaxPlayers}";
+                item.SubItems[4].Text = info is null ? "offline"
+                    : info.ModVersion != ModInfo.Version ? $"Mod {info.ModVersion}"
+                    : info.IsJoinable ? (info.HasPassword ? "online, PW" : "online")
+                    : "startet";
+                item.ForeColor = info is { IsJoinable: true } && info.ModVersion == ModInfo.Version ? SystemColors.WindowText : SystemColors.GrayText;
+            }));
+        }
+        finally { _refreshing = false; }
+    }
+
+    static async Task<IPEndPoint?> ResolveAsync(string host, int port)
+    {
+        try
+        {
+            var address = (await Dns.GetHostAddressesAsync(host)).FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+            return address is null ? null : new IPEndPoint(address, port);
+        }
+        catch (SocketException) { return null; }
     }
 
     void FillFromFavorite()
     {
-        if (_favorites.SelectedItem is not Favorite f) return;
+        if (SelectedFavorite is not { } f) return;
         _name.Text = f.Name;
         _host.Text = f.Host;
         _port.Value = f.Port;
@@ -132,11 +187,12 @@ public sealed class ClientForm : Form
         Favorites.Save(_favoriteList);
         RefreshFavorites();
         SetStatus($"Favorit '{name}' gespeichert.");
+        _ = RefreshServerInfoAsync();
     }
 
     void RemoveFavorite()
     {
-        if (_favorites.SelectedItem is not Favorite f) return;
+        if (SelectedFavorite is not { } f) return;
         _favoriteList.Remove(f);
         Favorites.Save(_favoriteList);
         RefreshFavorites();
@@ -152,21 +208,40 @@ public sealed class ClientForm : Form
             return;
         }
 
-        IPAddress address;
-        try
-        {
-            SetStatus($"Löse {host} auf ...");
-            var addresses = await Dns.GetHostAddressesAsync(host);
-            address = addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)
-                ?? throw new SocketException((int)SocketError.HostNotFound);
-        }
-        catch (SocketException)
+        SetStatus($"Löse {host} auf ...");
+        var queryPort = SelectedFavorite is { } fav && fav.Host == host && fav.Port == port ? fav.EffectiveQueryPort : ServerQuery.DefaultQueryPort(port);
+        var queryEp = await ResolveAsync(host, queryPort);
+        if (queryEp is null)
         {
             SetStatus($"Hostname '{host}' wurde nicht gefunden.", error: true);
             return;
         }
+        var address = queryEp.Address;
 
-        _target = $"{host}:{port}";
+        // Vorab-Prüfung über den Abfrage-Port: erreichbar, Version, voll, Passwort.
+        _connect.Enabled = false;
+        SetStatus($"Frage {host} ab ...");
+        var gameDir = GameLocator.FindGameDir();
+        var verdict = await JoinCheck.RunAsync(queryEp, gameDir is null ? "" : GameLocator.ReadBuildId(gameDir), _password.Text);
+        _connect.Enabled = true;
+        if (verdict.Problem == JoinProblem.NoAnswer)
+        {
+            if (MessageBox.Show(this, $"Der Server antwortet nicht auf dem Abfrage-Port {queryPort}/UDP.\n\n"
+                    + "Läuft der Server? Ist der Port freigegeben? Von Mitspielern selbst gehostete Spiele haben keinen "
+                    + "Abfrage-Port und antworten hier nie.\n\nTrotzdem verbinden?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                SetStatus(verdict.Message, error: true);
+                return;
+            }
+        }
+        else if (!verdict.Ok)
+        {
+            SetStatus(verdict.Message, error: true);
+            if (verdict.Problem is JoinProblem.PasswordNeeded or JoinProblem.WrongPassword) _password.Focus();
+            return;
+        }
+
+        _target = verdict.Info is { Name.Length: > 0 } i ? $"{i.Name} ({host}:{port})" : $"{host}:{port}";
         StartGame("client", new[] { $"{address}:{port}" }, ModInfo.DefaultPort, $"Spiel startet und verbindet mit {_target} ...");
     }
 

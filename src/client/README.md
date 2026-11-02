@@ -1,4 +1,5 @@
-# Client-Mod
+# Client (DDS2 Multiplayer)
 
-Geplant: UE4SS-Mod im Spiel (Menüpunkt „Server beitreten“, IP/Port-Eingabe, Favoriten,
-Fehlermeldungen, Versionscheck). Wird nach erfolgreichem Proof of Concept umgesetzt.
+`ClientForm.cs` – Launcher: Server per IP/Hostname beitreten, Favoriten mit Ping/Spielerzahl (Abfrage-Port),
+Prüfung vor dem Verbinden (`JoinCheck`), selbst hosten, normaler Start über Steam.
+Das Menü im Spiel selbst ist Teil der Lua-Mod: `src/shared/DDS2Net/Scripts/menu.lua`.

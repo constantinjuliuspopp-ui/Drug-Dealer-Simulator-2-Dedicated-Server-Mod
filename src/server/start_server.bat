@@ -1,6 +1,9 @@
 @echo off
-rem Startet den DDS2-Server mit der server.cfg aus diesem Ordner.
-rem Parameter werden durchgereicht, z. B.: start_server.bat --port 7778 --maxplayers 4
-rem @DDS2MOD_EXE@ wird vom Installer durch den Pfad zur DDS2Mod.exe ersetzt.
+rem Startet den DDS2 Dedicated Server mit der server.cfg aus diesem Ordner.
+rem Weitere Parameter werden durchgereicht, z. B.:
+rem   start_server.bat --port 7777 --maxplayers 2 --world "Welt1"
+rem @DDS2SERVER_EXE@ wird vom Installer durch den Pfad zur DDS2Server.exe ersetzt.
+chcp 65001 >nul
 cd /d "%~dp0"
-start "" "@DDS2MOD_EXE@" --server --config "%~dp0server.cfg" %*
+"@DDS2SERVER_EXE@" --config "%~dp0server.cfg" %*
+if errorlevel 1 pause

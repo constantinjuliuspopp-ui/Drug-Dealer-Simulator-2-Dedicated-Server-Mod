@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <Compile Remove="shared\DDS2Net\**" />
+    <!-- Der Server ist ein eigenes Projekt (server\DDS2Server.csproj). -->
+    <Compile Remove="server\**" />
+    <None Remove="server\**" />
     <EmbeddedResource Include="shared\version.json" LogicalName="DDS2Mod.version.json" />
   </ItemGroup>
 

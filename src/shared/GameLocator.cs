@@ -43,6 +43,22 @@ public static class GameLocator
         return null;
     }
 
+    /// <summary>Steam-Build-ID aus appmanifest_1708850.acf (liegt zwei Ebenen über dem Spielordner), "" wenn unbekannt.</summary>
+    public static string ReadBuildId(string gameDir)
+    {
+        try
+        {
+            var manifest = Path.Combine(gameDir, "..", "..", $"appmanifest_{ModInfo.SteamAppId}.acf");
+            var m = Regex.Match(File.ReadAllText(manifest), "\"buildid\"\\s+\"(\\d+)\"");
+            return m.Success ? m.Groups[1].Value : "";
+        }
+        catch (IOException) { return ""; }
+        catch (UnauthorizedAccessException) { return ""; }
+    }
+
+    /// <summary>Das Spiel startet nur mit laufendem, angemeldetem Steam-Client (Kopierschutz des Spiels).</summary>
+    public static bool IsSteamRunning() => Process.GetProcessesByName("steam").Length > 0;
+
     public static bool IsGameDir(string dir) =>
         !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "DrugDealerSimulator2.exe"));
 

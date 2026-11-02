@@ -510,6 +510,9 @@ local function WriteStatus(pc, mode, place)
         "time=" .. os.time(),
     }
     if mode ~= "loading" then
+        -- eigener Spieler (beim Server der Host-Charakter), damit der Launcher ihn nicht als Mitspieler zählt
+        local okSelf, selfName = pcall(function() return PlayerName(pc.PlayerState) end)
+        if okSelf and selfName and selfName ~= "?" then table.insert(lines, "self=" .. selfName) end
         for _, p in ipairs(Players()) do
             table.insert(lines, "player=" .. p.name .. "|" .. p.ping)
         end

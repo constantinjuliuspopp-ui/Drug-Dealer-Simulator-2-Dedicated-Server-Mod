@@ -1,11 +1,16 @@
-# DDS2 Multiplayer Mod – Server-Konfiguration
-# Kommandozeilen-Parameter (--port, --maxplayers, --world) überschreiben diese Werte.
+# DDS2 Multiplayer Mod – Server-Konfiguration (DDS2Server.exe)
+# Kommandozeilen-Parameter überschreiben diese Werte, z. B.:
+#   DDS2Server.exe --port 7777 --maxplayers 2 --world "Welt1"
 
 ServerName=Mein DDS2 Server
+# Spielport (UDP). In Router und Firewall freigeben.
 Port=7777
-# Das Spiel ist für 3 Spieler ausgelegt. Höhere Werte sind experimentell.
-# Im Pseudo-Dedicated-Modus belegt der Host selbst einen Platz.
-MaxPlayers=3
+# Abfrage-Port (UDP) für Ping, Spielerzahl, Version und Passwortprüfung. 0 = Spielport + 1 (also 7778).
+# Ebenfalls freigeben, sonst sehen Mitspieler den Server als "offline" (Verbinden geht trotzdem).
+QueryPort=0
+# Mitspieler (ohne den Server selbst). Das Spiel ist für 3 Spieler ausgelegt: Server + 2.
+# Höhere Werte sind experimentell.
+MaxPlayers=2
 # Leer lassen für keinen Passwortschutz.
 Password=
 # Welt, die der Server lädt: Ordnername unter
@@ -14,3 +19,11 @@ Password=
 World=
 # Autosave-Intervall in Minuten, 0 = aus.
 AutosaveMinutes=10
+# true = Spiel ohne Fenster und Grafik starten. Klappt das nicht, startet der Server es
+# automatisch einmal mit kleinem Fenster. false = immer mit Fenster.
+Headless=true
+# Nach einem Absturz des Spiels automatisch neu starten (höchstens 3x in 10 Minuten).
+AutoRestart=true
+# Spielordner (mit DrugDealerSimulator2.exe). Leer = automatisch über Steam suchen.
+# Bei Installation per SteamCMD hier den Ordner eintragen.
+GameDir=

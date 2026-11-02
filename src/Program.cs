@@ -1,5 +1,5 @@
+using System.Diagnostics;
 using DDS2Mod.Client;
-using DDS2Mod.Server;
 using DDS2Mod.Shared;
 
 namespace DDS2Mod;
@@ -9,8 +9,14 @@ static class Program
     [STAThread]
     static int Main(string[] args)
     {
+        // Alte Verknüpfungen (bis 0.2) riefen "DDS2Mod.exe --server" auf: an DDS2Server.exe weiterreichen.
         if (HasFlag(args, "--server"))
-            return ServerMode.Run(args);
+        {
+            var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "DDS2Server.exe")) { UseShellExecute = true };
+            foreach (var a in args.Where(a => !a.Equals("--server", StringComparison.OrdinalIgnoreCase))) psi.ArgumentList.Add(a);
+            Process.Start(psi);
+            return 0;
+        }
 
         // Wird vom Deinstallationsprogramm aufgerufen.
         if (HasFlag(args, "--restore"))

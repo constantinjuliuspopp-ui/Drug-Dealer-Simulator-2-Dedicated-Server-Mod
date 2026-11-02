@@ -4,8 +4,12 @@ namespace DDS2Mod.Shared;
 
 public sealed record ModEvent(string Time, string Level, string Text);
 
-public sealed record ModStatus(string Version, string Role, string Mode, DateTimeOffset Time, IReadOnlyList<(string Name, int Ping)> Players, string Place = "")
+public sealed record ModStatus(string Version, string Role, string Mode, DateTimeOffset Time, IReadOnlyList<(string Name, int Ping)> Players, string Place = "", string Self = "")
 {
+    /// <summary>Alle Spieler außer dieser Instanz selbst (beim Server: die echten Mitspieler).</summary>
+    public IEnumerable<(string Name, int Ping)> Others =>
+        Self.Length == 0 && Players.Count > 0 ? Players.Skip(1) : Players.Where(p => p.Name != Self);
+
     public bool IsStale => DateTimeOffset.UtcNow - Time > TimeSpan.FromSeconds(10);
 }
 
@@ -69,7 +73,7 @@ public sealed class IpcChannel
         try { lines = File.ReadAllLines(_status); }
         catch (IOException) { return null; }
 
-        string version = "", role = "", mode = "", place = "";
+        string version = "", role = "", mode = "", place = "", self = "";
         long time = 0;
         var players = new List<(string, int)>();
         foreach (var line in lines)
@@ -84,6 +88,7 @@ public sealed class IpcChannel
                 case "role": role = value; break;
                 case "mode": mode = value; break;
                 case "place": place = value; break;
+                case "self": self = value; break;
                 case "time": long.TryParse(value, out time); break;
                 case "player":
                     var sep = value.LastIndexOf('|');
@@ -93,6 +98,6 @@ public sealed class IpcChannel
                     break;
             }
         }
-        return mode == "" ? null : new ModStatus(version, role, mode, DateTimeOffset.FromUnixTimeSeconds(time), players, place);
+        return mode == "" ? null : new ModStatus(version, role, mode, DateTimeOffset.FromUnixTimeSeconds(time), players, place, self);
     }
 }

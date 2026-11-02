@@ -2,8 +2,11 @@ using System.Text.Json;
 
 namespace DDS2Mod.Shared;
 
-public sealed record Favorite(string Name, string Host, int Port)
+/// <param name="QueryPort">Abfrage-Port des Servers, 0 = Port + 1.</param>
+public sealed record Favorite(string Name, string Host, int Port, int QueryPort = 0)
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int EffectiveQueryPort => QueryPort > 0 ? QueryPort : ServerQuery.DefaultQueryPort(Port);
     public override string ToString() => $"{Name}  ({Host}:{Port})";
 }
 
@@ -12,7 +15,12 @@ public static class Favorites
 {
     sealed record FileModel(int Version, List<Favorite> Favorites);
 
-    static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
+    static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
+    };
 
     static string FilePath => Path.Combine(ModInfo.AppDataDir, "favorites.json");
 
