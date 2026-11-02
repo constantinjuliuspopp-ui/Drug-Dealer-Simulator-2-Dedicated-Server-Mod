@@ -1,0 +1,4 @@
+# Linux-Dateien des Relays brauchen LF, Windows-Skripte CRLF (unabhaengig von core.autocrlf)
+*.sh text eol=lf
+*.service text eol=lf
+*.bat text eol=crlf
