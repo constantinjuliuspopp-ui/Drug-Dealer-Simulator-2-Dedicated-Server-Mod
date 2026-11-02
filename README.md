@@ -3,7 +3,7 @@
 Direkt-IP-Multiplayer und Dedicated Server für **Drug Dealer Simulator 2** (Steam, Windows).
 Inoffizielle Fan-Mod, nicht von den Entwicklern des Spiels.
 
-> **Version 0.5 – ungetestet im echten Spiel.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
+> **Version 0.5.1 – Server und Menü auf einem PC im Spiel getestet, Beitritt von einem zweiten PC noch ungetestet.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
 > Bitte Rückmeldung geben, was funktioniert und was nicht.
 
 ## Was die Mod kann
@@ -103,10 +103,14 @@ Option C ersetzt nicht den Dedicated Server: Ohne dein laufendes Spiel gibt es n
 
 ### Was du brauchst
 
-- Einen Windows-PC (10/11, 64 Bit), der laufen bleibt. Etwa 4–8 GB freier Arbeitsspeicher.
+- Einen **eigenen** Windows-PC (10/11, 64 Bit), der laufen bleibt – nicht den PC, auf dem du spielst.
+  Gemessen: rund **4 GB Arbeitsspeicher** und **0,2–0,3 CPU-Kerne** ohne Mitspieler (mit `TickRate=30`), keine Grafikkarte nötig.
+  Mit 8 GB RAM wird es knapp, 16 GB sind entspannt.
 - Ein **Steam-Konto mit dem Spiel** für diesen PC. Willst du gleichzeitig selbst auf einem anderen PC spielen, brauchst du
   ein **zweites Konto mit eigener Kopie**: Steam lässt ein Konto nur auf einem PC gleichzeitig spielen.
-- Steam-Client auf dem Server-PC, gestartet und angemeldet (Kopierschutz des Spiels).
+- Steam-Client auf dem Server-PC mit dem Server-Konto, einmal von Hand angemeldet mit „Angemeldet bleiben“
+  (Kopierschutz des Spiels). Danach startet der Server Steam bei Bedarf selbst im Hintergrund.
+- Die Mitspieler sehen das Spiel ganz normal mit Grafik – „ohne Grafik“ gilt nur für den Server-PC.
 
 ### Spiel installieren – Weg 1: Steam-Client (einfach)
 
@@ -147,7 +151,16 @@ auf dem Server-PC. Ab dann liegen **Welt und Fortschritt auf dem Server**.
 | `AutosaveMinutes` | Autosave-Intervall, 0 = aus |
 | `Headless` | `true` = ohne Fenster (Standard). Klappt das nicht, startet der Server das Spiel einmal mit kleinem Fenster |
 | `AutoRestart` | Spiel nach Absturz neu starten (höchstens 3× in 10 Minuten) |
+| `TickRate` | Spiel-Takte pro Sekunde, Standard 30 (spart ~90 % CPU gegenüber unbegrenzt); 0 = unbegrenzt |
+| `StartSteam` | Steam unsichtbar starten, falls es nicht läuft (Standard `true`) |
 | `GameDir` | Spielordner, falls nicht automatisch gefunden |
+
+### Automatisch starten
+
+Im Installer bei „Dedicated Server“ den Haken **„DDS2 Server bei der Windows-Anmeldung automatisch starten“** setzen.
+Dann startet nach der Windows-Anmeldung der Server, und der startet Steam unsichtbar, falls es noch nicht läuft.
+Zusammen mit der automatischen Windows-Anmeldung (Windows-Einstellungen → Konten) läuft der Server nach jedem
+Neustart des PCs von selbst. Bedienen lässt er sich dann z. B. per Remotedesktop im Konsolenfenster.
 
 ### Starten
 

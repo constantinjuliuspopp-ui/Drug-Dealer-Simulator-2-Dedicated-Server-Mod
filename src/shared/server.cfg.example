@@ -24,6 +24,12 @@ AutosaveMinutes=10
 Headless=true
 # Nach einem Absturz des Spiels automatisch neu starten (höchstens 3x in 10 Minuten).
 AutoRestart=true
+# Spiel-Takte pro Sekunde. Ohne Grafik rechnet das Spiel sonst so schnell es kann und braucht unnötig CPU.
+# 30 ist ein üblicher Wert für Server, 0 = unbegrenzt.
+TickRate=30
+# Läuft Steam nicht, startet der Server es unsichtbar und wartet auf die Anmeldung.
+# Dafür einmal von Hand mit dem Server-Konto anmelden und "Angemeldet bleiben" anhaken.
+StartSteam=true
 # Spielordner (mit DrugDealerSimulator2.exe). Leer = automatisch über Steam suchen.
 # Bei Installation per SteamCMD hier den Ordner eintragen.
 GameDir=

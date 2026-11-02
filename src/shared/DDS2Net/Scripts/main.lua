@@ -18,6 +18,8 @@ local IPC_DIR = os.getenv("DDS2_IPC_DIR")
 local ROLE = os.getenv("DDS2_ROLE") or "client"
 local WORLD = os.getenv("DDS2_WORLD") or ""
 local DEFAULT_PORT = tonumber(os.getenv("DDS2_DEFAULT_PORT") or "") or 7777
+-- Server: Bilder bzw. Spiel-Takte pro Sekunde begrenzen (ohne Grafik rechnet das Spiel sonst ungebremst)
+local MAX_FPS = tonumber(os.getenv("DDS2_MAX_FPS") or "")
 
 local NetworkFailures = {
     [0] = "NetDriverAlreadyExists", "NetDriverCreateFailure", "NetDriverListenFailure",
@@ -625,9 +627,18 @@ end)
 
 Log("Version " .. MOD_VERSION .. ", Rolle " .. ROLE .. ", IPC " .. tostring(IPC_DIR) .. ", Welt '" .. WORLD .. "'")
 
+local appliedFpsPlace = nil
+local function ApplyMaxFps(pc, place)
+    if not MAX_FPS or MAX_FPS <= 0 or not pc or place == appliedFpsPlace then return end
+    appliedFpsPlace = place
+    local ok, err = pcall(function() Kismet():ExecuteConsoleCommand(pc, "t.MaxFPS " .. MAX_FPS, pc) end)
+    if ok then Log("t.MaxFPS " .. MAX_FPS .. " gesetzt (" .. place .. ")") else Log("t.MaxFPS: " .. tostring(err)) end
+end
+
 local function Tick()
     local pc = LocalController()
     local place = Place(pc)
+    ApplyMaxFps(pc, place)
     if Menu then
         local ok, err = pcall(Menu.Tick)
         if not ok then Log("Menü: " .. tostring(err)) end

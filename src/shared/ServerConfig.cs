@@ -18,6 +18,10 @@ public sealed class ServerConfig
     public int QueryPort { get; set; }
     /// <summary>Spiel nach einem Absturz automatisch neu starten.</summary>
     public bool AutoRestart { get; set; } = true;
+    /// <summary>Spiel-Takte pro Sekunde (t.MaxFPS), 0 = unbegrenzt. Ohne Grafik spart das viel CPU.</summary>
+    public int TickRate { get; set; } = 30;
+    /// <summary>Steam unsichtbar starten, falls es nicht läuft, und auf die Anmeldung warten.</summary>
+    public bool StartSteam { get; set; } = true;
     public string GameDir { get; set; } = "";
 
     public int EffectiveQueryPort => QueryPort > 0 ? QueryPort : ServerQuery.DefaultQueryPort(Port);
@@ -68,6 +72,8 @@ public sealed class ServerConfig
             case "headless": Headless = ParseBool(value, where); break;
             case "queryport": QueryPort = ParseInt(value, 0, 65535, where); break;
             case "autorestart": AutoRestart = ParseBool(value, where); break;
+            case "tickrate": TickRate = value == "0" ? 0 : ParseInt(value, 10, 240, where); break;
+            case "startsteam": StartSteam = ParseBool(value, where); break;
             case "gamedir": GameDir = value; break;
             default: throw new FormatException($"{where}: unbekannte Einstellung '{key}'");
         }

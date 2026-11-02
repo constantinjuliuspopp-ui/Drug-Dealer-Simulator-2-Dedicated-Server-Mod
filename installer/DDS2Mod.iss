@@ -45,6 +45,7 @@ Name: "server"; Description: "Dedicated Server (DDS2Server.exe, Ordner Dokumente
 [Tasks]
 Name: "desktopicon"; Description: "Desktop-Verknüpfungen anlegen"
 Name: "firewall"; Description: "Windows-Firewall: eingehende UDP-Verbindungen zum Server erlauben (Spiel und Abfrage-Port)"; Components: server
+Name: "autostart"; Description: "DDS2 Server bei der Windows-Anmeldung automatisch starten (startet auch Steam im Hintergrund)"; Components: server; Flags: unchecked
 
 [Files]
 Source: "{#StageDir}\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -61,6 +62,8 @@ Name: "{group}\Anleitung"; Filename: "{app}\README.md"
 Name: "{group}\DDS2 Multiplayer deinstallieren"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\DDS2 Multiplayer"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon; Components: client
 Name: "{autodesktop}\DDS2 Server"; Filename: "{app}\{#ServerExe}"; Parameters: "--config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Tasks: desktopicon; Components: server
+; Autostart-Ordner des Benutzers: läuft in seiner Windows-Sitzung, wo auch Steam läuft
+Name: "{userstartup}\DDS2 Server"; Filename: "{app}\{#ServerExe}"; Parameters: "--config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Tasks: autostart; Components: server
 
 [Run]
 ; Firewall-Regeln erst löschen (Update), dann neu anlegen. Gelten nur für die beiden Programme, nicht für Ports allgemein.

@@ -97,7 +97,8 @@ public static class ServerMode
         Log("INFO", $"DDS2 Server {ModInfo.Version} – Konfiguration: {(File.Exists(cfgPath) ? cfgPath : cfgPath + " (fehlt, Standardwerte)")}");
         Log("INFO", $"Name '{cfg.ServerName}', Spielport {cfg.Port}/UDP, Abfrage-Port {cfg.EffectiveQueryPort}/UDP, "
             + $"max. {cfg.MaxPlayers} Mitspieler, Passwort {(cfg.Password.Length > 0 ? "an" : "aus")}, "
-            + $"{(cfg.Headless ? "ohne Fenster" : "mit Fenster")}, Autosave {(cfg.AutosaveMinutes > 0 ? cfg.AutosaveMinutes + " min" : "aus")}");
+            + $"{(cfg.Headless ? "ohne Fenster" : "mit Fenster")}, Autosave {(cfg.AutosaveMinutes > 0 ? cfg.AutosaveMinutes + " min" : "aus")}, "
+            + $"Takt {(cfg.TickRate > 0 ? cfg.TickRate + "/s" : "unbegrenzt")}");
         if (cfg.MaxPlayers > 2)
             Log("WARN", "Das Spiel ist für 3 Spieler ausgelegt (Server + 2). Mehr Mitspieler sind experimentell.");
 
@@ -106,9 +107,7 @@ public static class ServerMode
             throw new InvalidOperationException("Spielordner nicht gefunden. In server.cfg 'GameDir=' setzen (Ordner mit DrugDealerSimulator2.exe).");
         if (!GameProcess.IsModInstalled(gameDir))
             throw new InvalidOperationException($"Die Mod ist in {gameDir} nicht installiert. Bitte den Installer ausführen (Art 'Dedicated Server').");
-        if (!GameLocator.IsSteamRunning())
-            throw new InvalidOperationException("Steam läuft nicht. Das Spiel startet nur mit laufendem, angemeldetem Steam-Client "
-                + "(Konto, dem das Spiel gehört). Steam starten, anmelden, dann den Server erneut starten.");
+        EnsureSteam(cfg);
         if (GameLocator.IsGameRunning())
             throw new InvalidOperationException("Drug Dealer Simulator 2 läuft auf diesem PC schon. Bitte zuerst beenden – der Server startet seine eigene Instanz.");
         _gameBuild = GameLocator.ReadBuildId(gameDir);
@@ -149,6 +148,26 @@ public static class ServerMode
         return exitCode;
     }
 
+    /// <summary>
+    /// Das Spiel braucht einen laufenden, angemeldeten Steam-Client (Kopierschutz des Spiels). Läuft Steam nicht,
+    /// wird es unsichtbar gestartet (-silent); angemeldet wird es mit der gespeicherten Anmeldung ("Angemeldet bleiben").
+    /// </summary>
+    static void EnsureSteam(ServerConfig cfg)
+    {
+        if (GameLocator.IsSteamRunning()) return;
+        var steam = GameLocator.SteamExe();
+        if (!cfg.StartSteam || steam is null)
+            throw new InvalidOperationException("Steam läuft nicht. Das Spiel startet nur mit laufendem, angemeldetem Steam-Client "
+                + "(Konto, dem das Spiel gehört). Steam starten, anmelden, dann den Server erneut starten.");
+        Log("INFO", "Steam läuft nicht – starte Steam im Hintergrund und warte auf die Anmeldung ...");
+        Process.Start(new ProcessStartInfo(steam, "-silent") { UseShellExecute = true });
+        // Steam meldet die Anmeldung nicht überall in der Registry (ActiveUser bleibt teils 0): höchstens 60 s warten.
+        var until = DateTime.Now.AddSeconds(60);
+        while (DateTime.Now < until && !GameLocator.IsSteamLoggedIn()) Thread.Sleep(2000);
+        Log("INFO", GameLocator.IsSteamLoggedIn() ? "Steam ist angemeldet." : "Steam läuft – Anmeldung nicht erkennbar, versuche es trotzdem.");
+        Thread.Sleep(5000); // Steam braucht nach der Anmeldung einen Moment, bis Spiele starten können
+    }
+
     /// <summary>Startet das Spiel, wartet auf das Ende, startet nach Absturz neu oder wechselt auf Fenster-Modus.</summary>
     static int RunGameLoop(string gameDir, Cartel? world, ServerConfig cfg)
     {
@@ -163,6 +182,7 @@ public static class ServerMode
                 : new List<string> { "-windowed", "-ResX=800", "-ResY=450", "-nosplash" };
             var env = new Dictionary<string, string>();
             if (world != null) env["DDS2_WORLD"] = world.Alias;
+            if (cfg.TickRate > 0) env["DDS2_MAX_FPS"] = cfg.TickRate.ToString();
 
             var started = DateTime.Now;
             var game = _game = GameProcess.Launch(gameDir, "server", _ipc.Dir, gameArgs, env);

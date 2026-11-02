@@ -59,6 +59,15 @@ public static class GameLocator
     /// <summary>Das Spiel startet nur mit laufendem, angemeldetem Steam-Client (Kopierschutz des Spiels).</summary>
     public static bool IsSteamRunning() => Process.GetProcessesByName("steam").Length > 0;
 
+    /// <summary>Angemeldet = Steam trägt die Konto-ID des aktiven Benutzers in die Registry ein (0 = abgemeldet).</summary>
+    public static bool IsSteamLoggedIn() =>
+        IsSteamRunning()
+        && Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam\ActiveProcess", "ActiveUser", 0) is int id && id != 0;
+
+    public static string? SteamExe() =>
+        Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamExe", null) is string exe
+        && File.Exists(Path.GetFullPath(exe)) ? Path.GetFullPath(exe) : null;
+
     public static bool IsGameDir(string dir) =>
         !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "DrugDealerSimulator2.exe"));
 
