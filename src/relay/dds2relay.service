@@ -1,0 +1,25 @@
+# systemd-Dienst für DDS2Relay (Linux).
+# Installation (als root), Ordner /opt/dds2relay mit DDS2Relay, relay.cfg:
+#   useradd --system --home /opt/dds2relay dds2relay
+#   chmod +x /opt/dds2relay/DDS2Relay && chown -R dds2relay /opt/dds2relay
+#   cp dds2relay.service /etc/systemd/system/ && systemctl daemon-reload
+#   systemctl enable --now dds2relay
+#   journalctl -u dds2relay -f        (Log, dort steht auch der Schlüssel)
+[Unit]
+Description=DDS2 Multiplayer Mod – Relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dds2relay
+WorkingDirectory=/opt/dds2relay
+ExecStart=/opt/dds2relay/DDS2Relay --config /opt/dds2relay/relay.cfg
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/dds2relay
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

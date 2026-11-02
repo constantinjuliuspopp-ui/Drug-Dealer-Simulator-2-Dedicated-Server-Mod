@@ -26,6 +26,9 @@ public sealed class ClientForm : Form
     readonly Button _removeFavorite = new() { Text = "Favorit entfernen", AutoSize = true };
     readonly Button _refresh = new() { Text = "Aktualisieren", AutoSize = true };
     readonly System.Windows.Forms.Timer _refreshTimer = new() { Interval = 30_000 };
+    readonly TextBox _relayAddress = new() { Dock = DockStyle.Fill, PlaceholderText = "optional: relay.example.org – nur zum Hosten ohne Portfreigabe" };
+    readonly TextBox _relaySecret = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = true, PlaceholderText = "Schlüssel aus dem Relay-Log / relay.cfg" };
+    readonly CheckBox _useRelay = new() { Text = "Beim Hosten über das Relay erreichbar sein", AutoSize = true };
     readonly Label _status = new() { Dock = DockStyle.Fill, AutoSize = false, Text = "Bereit." };
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
 
@@ -40,12 +43,19 @@ public sealed class ClientForm : Form
     string _target = "";
     DateTime _launchedAt;
     bool _gotError, _reachedMode;
+    readonly LauncherSettings _settings = LauncherSettings.Load();
+    // Beim Hosten: eigener Abfrage-Port (Ping/Spielerzahl) und optional der Relay-Agent
+    CancellationTokenSource? _hostCts;
+    ServerQuery.Responder? _hostQuery;
+    RelayAgent? _relayAgent;
+    volatile ModStatus? _lastStatus;
+    string _gameBuild = "";
 
     public ClientForm()
     {
         Text = $"DDS2 Multiplayer {ModInfo.Version}";
-        MinimumSize = new Size(900, 440);
-        Size = new Size(1000, 480);
+        MinimumSize = new Size(900, 540);
+        Size = new Size(1000, 580);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9.5f);
 
@@ -56,6 +66,13 @@ public sealed class ClientForm : Form
         AddRow(fields, "IP / Hostname", _host);
         AddRow(fields, "Port", _port);
         AddRow(fields, "Passwort", _password);
+        AddRow(fields, "Relay", _relayAddress);
+        AddRow(fields, "Relay-Schlüssel", _relaySecret);
+        fields.Controls.Add(new Label());
+        fields.Controls.Add(_useRelay);
+        _relayAddress.Text = _settings.RelayAddress;
+        _relaySecret.Text = _settings.RelaySecret;
+        _useRelay.Checked = _settings.UseRelay;
 
         var favButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         favButtons.Controls.AddRange(new Control[] { _saveFavorite, _removeFavorite, _refresh });
@@ -234,8 +251,8 @@ public sealed class ClientForm : Form
         if (verdict.Problem == JoinProblem.NoAnswer)
         {
             if (MessageBox.Show(this, $"Der Server antwortet nicht auf dem Abfrage-Port {queryPort}/UDP.\n\n"
-                    + "Läuft der Server? Ist der Port freigegeben? Von Mitspielern selbst gehostete Spiele haben keinen "
-                    + "Abfrage-Port und antworten hier nie.\n\nTrotzdem verbinden?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    + "Läuft der Server bzw. das Spiel des Hosts? Ist UDP " + queryPort + " freigegeben? Ist nur der Spielport "
+                    + "freigegeben, klappt das Verbinden trotzdem.\n\nTrotzdem verbinden?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             {
                 SetStatus(verdict.Message, error: true);
                 return;
@@ -252,10 +269,70 @@ public sealed class ClientForm : Form
         StartGame("client", new[] { $"{address}:{port}" }, ModInfo.DefaultPort, $"Spiel startet und verbindet mit {_target} ...");
     }
 
-    void HostGame() =>
-        StartGame("host", Array.Empty<string>(), (int)_port.Value,
-            $"Spiel startet. Hosten: Spielstand als Koop laden – andere verbinden sich auf Port {(int)_port.Value}/UDP. "
-            + "Beitreten: im Hauptmenü F8 drücken oder oben rechts auf \"Server beitreten\" klicken.");
+    void HostGame()
+    {
+        string relayHost = "";
+        var relayPort = RelayProtocol.DefaultAgentPort;
+        if (_useRelay.Checked && (!RelayProtocol.TryParseAddress(_relayAddress.Text, out relayHost, out relayPort) || _relaySecret.Text.Trim().Length == 0))
+        {
+            SetStatus("Relay: bitte Adresse (z. B. relay.example.org) und Schlüssel eintragen – oder den Haken entfernen.", error: true);
+            return;
+        }
+        _settings.RelayAddress = _relayAddress.Text.Trim();
+        _settings.RelaySecret = _relaySecret.Text.Trim();
+        _settings.UseRelay = _useRelay.Checked;
+        try { _settings.Save(); } catch (IOException) { }
+
+        var port = (int)_port.Value;
+        StartGame("host", Array.Empty<string>(), port,
+            $"Spiel startet. Hosten: Spielstand als Koop laden – andere verbinden sich auf Port {port}/UDP"
+            + (_useRelay.Checked ? $" oder über das Relay {relayHost}." : ".")
+            + " Beitreten: im Hauptmenü auf \"SERVER BEITRETEN\" klicken.");
+        if (_game != null) StartHostServices(port, _useRelay.Checked ? relayHost : null, relayPort);
+    }
+
+    void StartHostServices(int port, string? relayHost, int relayPort)
+    {
+        _hostCts = new CancellationTokenSource();
+        var queryPort = ServerQuery.DefaultQueryPort(port);
+        try
+        {
+            _hostQuery = new ServerQuery.Responder(queryPort, _activePassword, HostInfo);
+            _ = _hostQuery.RunAsync(_hostCts.Token);
+        }
+        catch (SocketException)
+        {
+            _hostQuery = null; // Port belegt (z. B. eigener Server läuft): Hosten geht trotzdem, nur ohne Ping-Anzeige
+        }
+        if (relayHost is null) return;
+        _relayAgent = new RelayAgent(relayHost, relayPort, _relaySecret.Text.Trim(), port, queryPort);
+        _relayAgent.Status += (message, isError) => BeginInvoke(() => SetStatus("Relay: " + message, isError));
+        _relayAgent.Start();
+    }
+
+    void StopHostServices()
+    {
+        _hostCts?.Cancel();
+        _hostQuery?.Dispose();
+        _relayAgent?.Dispose();
+        _hostCts = null;
+        _hostQuery = null;
+        _relayAgent = null;
+    }
+
+    // Was der eigene Abfrage-Port beim Hosten meldet (läuft auf einem Hintergrund-Thread).
+    ServerInfo HostInfo()
+    {
+        var s = _lastStatus;
+        var state = s is null || s.IsStale ? "starting"
+            : s.Mode == "host" ? s.Place
+            : s.Mode == "client" ? "client"
+            : s.Place == "world" ? "singleplayer"
+            : s.Place;
+        var players = s is { Mode: "host", IsStale: false } ? s.Others.Count() : 0;
+        return new ServerInfo($"{Environment.UserName}s Spiel", ModInfo.Version, ServerQuery.ProtocolVersion, _gameBuild, state,
+            players, 2, _activePassword.Length > 0, "");
+    }
 
     void StartGame(string expectedMode, string[] gameArgs, int listenPort, string message)
     {
@@ -280,6 +357,7 @@ public sealed class ClientForm : Form
             SaveBackup.Create();
             IniOverride.Apply(new OverrideSettings(listenPort, 3, _password.Text));
             _activePassword = _password.Text;
+            _gameBuild = GameLocator.ReadBuildId(gameDir);
             _ipc.Reset();
             _game = GameProcess.Launch(gameDir, "client", _ipc.Dir, gameArgs);
         }
@@ -363,7 +441,7 @@ public sealed class ClientForm : Form
             SetStatus(ErrorTexts.Describe(e), error: true);
         }
 
-        var status = _ipc.ReadStatus();
+        var status = _lastStatus = _ipc.ReadStatus();
         if (status is { IsStale: false })
         {
             if (status.Version != ModInfo.Version)
@@ -376,7 +454,14 @@ public sealed class ClientForm : Form
             else if (status.Mode == "host")
             {
                 _reachedMode = true;
-                SetStatus($"Du hostest auf Port {(int)_port.Value}/UDP – {status.Players.Count} Spieler: {string.Join(", ", status.Players.Select(p => p.Name))}");
+                var relay = _relayAgent switch
+                {
+                    { Connected: true } a => $" | über Relay: {a.RelayHost}:{a.RelayGamePort}",
+                    { } a => " | Relay: " + (a.LastError.Length > 0 ? a.LastError : "verbinde ..."),
+                    null => "",
+                };
+                SetStatus($"Du hostest auf Port {(int)_port.Value}/UDP – {status.Players.Count} Spieler: {string.Join(", ", status.Players.Select(p => p.Name))}{relay}",
+                    _relayAgent is { Connected: false, LastError.Length: > 0 });
             }
         }
 
@@ -390,6 +475,7 @@ public sealed class ClientForm : Form
         {
             _timer.Stop();
             _game = null;
+            StopHostServices();
             if (!GameLocator.IsGameRunning()) IniOverride.RestoreAll();
             SetRunning(false);
             if (_restartTarget is { } restart)
@@ -419,9 +505,12 @@ public sealed class ClientForm : Form
         if (_game is { HasExited: false })
         {
             var answer = MessageBox.Show(this,
-                "Das Spiel läuft noch. Die Mod-Einstellungen bleiben aktiv, bis du DDS2 Multiplayer wieder öffnest. Trotzdem schließen?",
+                "Das Spiel läuft noch. Die Mod-Einstellungen bleiben aktiv, bis du DDS2 Multiplayer wieder öffnest."
+                + (_relayAgent != null ? " Die Verbindung zum Relay wird getrennt – Mitspieler über das Relay fliegen raus." : "")
+                + " Trotzdem schließen?",
                 Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (answer != DialogResult.Yes) e.Cancel = true;
         }
+        if (!e.Cancel) StopHostServices();
     }
 }

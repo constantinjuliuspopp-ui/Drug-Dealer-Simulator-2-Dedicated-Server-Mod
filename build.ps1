@@ -46,4 +46,24 @@ if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) nicht gefunden" }
 if ($LASTEXITCODE) { throw "Inno Setup fehlgeschlagen" }
 # Für die Ersteinrichtung per SteamCMD auch einzeln (wird vor dem Setup ausgeführt).
 Copy-Item "$root\src\server\install_server.bat" "$root\dist\install_server.bat" -Force
-Write-Host "Fertig: $root\dist\DDS2Mod-Setup-$version.exe und dist\install_server.bat" -ForegroundColor Green
+
+# Relay (ohne Spieldateien): eigenständige Pakete für Linux und Windows
+foreach ($rid in "linux-x64", "win-x64") {
+    $relayOut = "$root\out\relay\$rid"
+    if (Test-Path $relayOut) { Remove-Item $relayOut -Recurse -Force }
+    dotnet publish "$root\src\relay\DDS2Relay.csproj" -c Release -r $rid -o $relayOut --nologo
+    if ($LASTEXITCODE) { throw "dotnet publish fehlgeschlagen (Relay $rid)" }
+    Get-ChildItem $relayOut -Filter *.pdb | Remove-Item
+    Copy-Item "$root\src\relay\relay.cfg.example", "$root\src\relay\README-Relay.md" $relayOut
+    if ($rid -eq "linux-x64") {
+        Copy-Item "$root\src\relay\start_relay.sh", "$root\src\relay\dds2relay.service" $relayOut
+        $archive = "$root\dist\DDS2Relay-$version-linux-x64.tar.gz"
+        if (Test-Path $archive) { Remove-Item $archive }
+        & "$env:SystemRoot\System32\tar.exe" -czf $archive -C $relayOut .
+        if ($LASTEXITCODE) { throw "tar fehlgeschlagen" }
+    } else {
+        Copy-Item "$root\src\relay\start_relay.bat" $relayOut
+        Compress-Archive -Path "$relayOut\*" -DestinationPath "$root\dist\DDS2Relay-$version-windows.zip" -Force
+    }
+}
+Write-Host "Fertig: $root\dist\DDS2Mod-Setup-$version.exe, install_server.bat, DDS2Relay-$version-linux-x64.tar.gz, DDS2Relay-$version-windows.zip" -ForegroundColor Green

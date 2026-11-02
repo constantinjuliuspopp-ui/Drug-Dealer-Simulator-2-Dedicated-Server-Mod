@@ -1,0 +1,10 @@
+# DDS2Relay – Konfiguration (alle Ports UDP)
+# Mitspieler verbinden sich auf GamePort (und fragen QueryPort ab), der Host meldet sich auf AgentPort an.
+GamePort=7777
+QueryPort=7778
+AgentPort=7779
+# Gleichzeitige Mitspieler über das Relay
+MaxClients=8
+# Leer lassen: wird beim ersten Start zufällig erzeugt und hier eingetragen.
+# Der Host trägt diesen Schlüssel in DDS2 Multiplayer ein.
+Secret=

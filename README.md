@@ -3,12 +3,12 @@
 Direkt-IP-Multiplayer und Dedicated Server für **Drug Dealer Simulator 2** (Steam, Windows).
 Inoffizielle Fan-Mod, nicht von den Entwicklern des Spiels.
 
-> **Version 0.4 – ungetestet im echten Spiel.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
+> **Version 0.5 – ungetestet im echten Spiel.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
 > Bitte Rückmeldung geben, was funktioniert und was nicht.
 
 ## Was die Mod kann
 
-| Funktion | Stand 0.4 |
+| Funktion | Stand 0.5 |
 |---|---|
 | Server per IP/Hostname + Port beitreten | ✅ im Programm **DDS2 Multiplayer** oder im Spielmenü |
 | Favoriten mit Name, IP, Port, **Ping und Spielerzahl** | ✅ `%APPDATA%\DDS2Mod\favorites.json` |
@@ -20,7 +20,7 @@ Inoffizielle Fan-Mod, nicht von den Entwicklern des Spiels.
 | Welt automatisch laden, Autosave, Log mit Zeitstempel, Neustart nach Absturz | ✅ (zu testen) |
 | Spiel auf dem Server per **SteamCMD** installieren/aktualisieren | ✅ `install_server.bat` (mit Steam-Anmeldung) |
 | Ein Installer mit Auswahl „Client-Mod“ / „Dedicated Server“, Backups, Deinstallation | ✅ |
-| Relay für Spieler ohne Portfreigabe (auch Linux) | geplant (0.5) |
+| **Relay** für Hosts ohne Portfreigabe (DS-Lite/CGNAT), läuft auf Linux und Windows ohne Spieldateien | ✅ `DDS2Relay` (zu testen) |
 
 **Grenzen, die das Spiel vorgibt:** Es gibt keine offizielle Server-Version des Spiels. Der Dedicated Server startet
 deshalb das normale Spiel ohne Fenster. Das Spiel hat einen Steam-Kopierschutz: Auf dem Server-PC muss der
@@ -50,8 +50,8 @@ gesicherte Dateien zurückgelegt, die Configs und Firewall-Regeln zurückgesetzt
 1. **DDS2 Multiplayer** starten (Startmenü oder Desktop).
 2. IP oder Hostname und Port des Servers eintragen (Standard `7777`), ggf. Passwort.
 3. **Verbinden**. Vorher fragt DDS2 Multiplayer den Server ab und meldet sofort:
-   - **Zeitüberschreitung** – der Server antwortet nicht. Du kannst trotzdem verbinden, z. B. bei einem Spieler, der
-     selbst hostet; der hat keinen Abfrage-Port.
+   - **Zeitüberschreitung** – der Server antwortet nicht. Du kannst trotzdem verbinden, z. B. wenn beim Host nur
+     UDP 7777, aber nicht 7778 freigegeben ist.
    - **Versionskonflikt** – andere Mod-Version oder anderes Spiel-Update.
    - **Server voll**
    - **Passwort fehlt / falsches Passwort**
@@ -76,7 +76,28 @@ Es öffnet sich ein Fenster im Stil des Spiels:
 Steam-Einladungen wie gewohnt.
 
 **Selbst hosten und mitspielen:** **Mit Mod starten**, im Spiel den Spielstand laden und ein Koop-Spiel starten.
-Mitspieler verbinden sich mit deiner IP auf Port 7777.
+Mitspieler verbinden sich mit deiner IP auf Port 7777. Dafür brauchst du eine Portfreigabe (siehe unten) – oder das Relay.
+
+## Hosten ohne Portfreigabe: Relay
+
+Wenn du keine Ports freigeben kannst (DS-Lite/CGNAT, Uni-/Firmennetz, mobiles Internet), hilft **DDS2Relay**: ein kleines
+Programm auf einem Rechner mit öffentlicher IP, z. B. einem günstigen Linux-VPS. Es braucht **keine Spieldateien und
+kein Steam** und reicht die Pakete nur weiter. Welt und Spielstand bleiben bei dir als Host.
+
+```
+Mitspieler ──UDP 7777/7778──▶ DDS2Relay ◀──UDP 7779── DDS2 Multiplayer (du) ──▶ dein Spiel
+```
+
+1. Auf dem Server `DDS2Relay-<Version>-linux-x64.tar.gz` (oder `-windows.zip`) entpacken und `sh start_relay.sh`
+   (Windows: `start_relay.bat`) starten. Beim ersten Start steht im Log der **Relay-Schlüssel**.
+   UDP 7777–7779 in der Firewall des Servers öffnen. Details und Dienst-Einrichtung: `README-Relay.md` im Paket.
+2. Bei dir in **DDS2 Multiplayer**: **Relay** = Adresse des Servers, **Relay-Schlüssel** eintragen, Haken bei
+   **„Beim Hosten über das Relay erreichbar sein“**, dann **Mit Mod starten** und die Welt als Koop laden.
+3. Mitspieler verbinden sich mit der **Adresse des Relays**, Port 7777 – wie bei jedem anderen Server.
+
+DDS2 Multiplayer muss beim Hosten offen bleiben, sonst ist die Verbindung zum Relay weg.
+
+Option C ersetzt nicht den Dedicated Server: Ohne dein laufendes Spiel gibt es nichts zum Beitreten.
 
 ## Dedicated Server
 
@@ -174,7 +195,7 @@ Logs: `Dokumente\DDS2 Server\logs` (die letzten 30). Spielstand-Backups bei jede
 4. Mitspieler verbinden sich mit der **öffentlichen IP** (z. B. „Wie ist meine IP“ im Browser) oder einem DynDNS-Namen.
 
 Hast du **DS-Lite / CGNAT** (häufig bei Kabel- und Glasfaseranschlüssen), funktioniert eine IPv4-Portfreigabe nicht.
-Dann hilft ein VPN wie ZeroTier/Tailscale/Radmin VPN, ein Server mit eigener öffentlicher IP oder später das Relay (0.5).
+Dann hilft das **Relay** (siehe oben), ein VPN wie ZeroTier/Tailscale/Radmin VPN oder ein Server mit eigener öffentlicher IP.
 
 ## Fehlerbehebung
 
@@ -198,6 +219,8 @@ Dann hilft ein VPN wie ZeroTier/Tailscale/Radmin VPN, ein Server mit eigener öf
 | Popup des Spiels ist leer oder sieht falsch aus | In `…\ue4ss\Mods\DDS2Net\config.txt` `GamePopups=false` setzen; die Meldung steht dann nur im Fenster. |
 | Im Spielmenü: „Prüfe …“ dauert und verbindet dann ohne Prüfung | DDS2 Multiplayer wurde geschlossen. Offen lassen, solange du spielst. |
 | Steam-Koop geht nicht mehr | In DDS2 Multiplayer **Normal starten (Steam-Koop)** benutzen. |
+| Relay: „antwortet nicht“ / „falscher Relay-Schlüssel“ / „Uhrzeit weicht ab“ | Läuft DDS2Relay, ist UDP 7779 offen? Schlüssel genau übernehmen. Uhrzeit synchronisieren. Mehr in `README-Relay.md`. |
+| Über das Relay: Zeitüberschreitung | Hat der Host die Welt als Koop geladen und DDS2 Multiplayer offen? UDP 7777/7778 am Relay-Server offen? |
 
 Logs für Fehlerberichte:
 - Server: `Dokumente\DDS2 Server\logs\`
@@ -211,6 +234,7 @@ Logs für Fehlerberichte:
 | `src/shared/` | gemeinsamer C#-Code (Konfiguration, Abfrage-Protokoll `ServerQuery`, `JoinCheck`, IPC), Lua-Mod `DDS2Net` |
 | `src/client/` | Launcher **DDS2 Multiplayer** (`src/DDS2Mod.csproj`) |
 | `src/server/` | **DDS2Server.exe** (`DDS2Server.csproj`), `start_server.bat`, `install_server.bat` |
+| `src/relay/` | **DDS2Relay** (`DDS2Relay.csproj`, .NET 8, Linux/Windows), Start-Skripte, systemd-Dienst; Protokoll in `src/shared/RelayProtocol.cs`, Gegenstück im Launcher `src/shared/RelayAgent.cs` |
 | `installer/` | Inno-Setup-Skript, UE4SS-Modliste |
 | `tools/` | Proof-of-Concept-Skripte, `iostore-names` (liest Namen aus den Spiel-Paketen, nur lesen) |
 | `docs/` | Analysen, Testanleitungen |

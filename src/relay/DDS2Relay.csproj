@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DDS2Relay: Relay-Server ohne Spieldateien und ohne Steam, für Windows und Linux. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DDS2Mod</RootNamespace>
+    <AssemblyName>DDS2Relay</AssemblyName>
+    <Product>DDS2 Multiplayer Mod – Relay</Product>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\shared\RelayProtocol.cs" Link="shared\RelayProtocol.cs" />
+    <EmbeddedResource Include="..\shared\version.json" LogicalName="DDS2Mod.version.json" />
+  </ItemGroup>
+
+</Project>
