@@ -30,7 +30,8 @@ Der Server ist im Spiel selbst ein Spieler (Host) und belegt einen Platz.
 ## Installation
 
 1. Spiel mindestens **einmal über Steam starten** (bis ins Hauptmenü) und beenden.
-2. `DDS2Mod-Setup-<Version>.exe` ausführen und die Art wählen:
+2. Setup ausführen: `DDS2Mod-Client-Setup-<Version>.exe` auf den PCs zum Spielen, `DDS2Mod-Server-Setup-<Version>.exe`
+   auf dem Server-PC. Beide sind dasselbe Setup, nur die Art ist schon passend vorausgewählt:
    - **Client-Mod** – du willst auf Servern mitspielen oder selbst hosten.
    - **Dedicated Server** – dieser PC soll der Server sein.
    - **Beides** – z. B. zum Testen.

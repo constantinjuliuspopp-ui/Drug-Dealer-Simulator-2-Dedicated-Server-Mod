@@ -42,8 +42,11 @@ if ($SkipInstaller) { Write-Host "Stage fertig: $stage"; return }
 $iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
     Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) nicht gefunden" }
-& $iscc /Q "/DAppVersion=$version" "$root\installer\DDS2Mod.iss"
-if ($LASTEXITCODE) { throw "Inno Setup fehlgeschlagen" }
+# Zwei Setups mit unterschiedlicher Vorauswahl (Client-Mod bzw. Dedicated Server)
+foreach ($variant in "Client", "Server") {
+    & $iscc /Q "/DAppVersion=$version" "/DVariant=$variant" "$root\installer\DDS2Mod.iss"
+    if ($LASTEXITCODE) { throw "Inno Setup fehlgeschlagen ($variant)" }
+}
 # Für die Ersteinrichtung per SteamCMD auch einzeln (wird vor dem Setup ausgeführt).
 Copy-Item "$root\src\server\install_server.bat" "$root\dist\install_server.bat" -Force
 
@@ -66,4 +69,4 @@ foreach ($rid in "linux-x64", "win-x64") {
         Compress-Archive -Path "$relayOut\*" -DestinationPath "$root\dist\DDS2Relay-$version-windows.zip" -Force
     }
 }
-Write-Host "Fertig: $root\dist\DDS2Mod-Setup-$version.exe, install_server.bat, DDS2Relay-$version-linux-x64.tar.gz, DDS2Relay-$version-windows.zip" -ForegroundColor Green
+Write-Host "Fertig: $root\dist\DDS2Mod-Client-Setup-$version.exe, DDS2Mod-Server-Setup-$version.exe, install_server.bat, DDS2Relay-$version-linux-x64.tar.gz, DDS2Relay-$version-windows.zip" -ForegroundColor Green
