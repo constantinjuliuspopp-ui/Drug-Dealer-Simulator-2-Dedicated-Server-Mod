@@ -47,12 +47,23 @@ public static class Favorites
     }
 
     /// <summary>
-    /// favorites.txt für das Menü im Spiel (Lua hat keinen JSON-Parser): eine Zeile "Name|Host|Port".
+    /// favorites.txt für das Menü im Spiel (Lua hat keinen JSON-Parser):
+    /// eine Zeile "Name|Host|Port|Ping|Spieler|Max|Zustand" (Ping/Spieler leer = unbekannt).
     /// </summary>
-    public static void ExportForGame(List<Favorite> favorites)
+    public static void ExportForGame(List<Favorite> favorites, IReadOnlyDictionary<Favorite, ServerInfo?>? infos = null, string? dir = null)
     {
-        Directory.CreateDirectory(ModInfo.AppDataDir);
-        var lines = favorites.Select(f => $"{f.Name.Replace('|', '/')}|{f.Host}|{f.Port}");
-        File.WriteAllLines(Path.Combine(ModInfo.AppDataDir, "favorites.txt"), lines, new System.Text.UTF8Encoding(false));
+        dir ??= ModInfo.AppDataDir;
+        Directory.CreateDirectory(dir);
+        var lines = favorites.Select(f =>
+        {
+            ServerInfo? info = null;
+            var queried = infos != null && infos.TryGetValue(f, out info);
+            return string.Join('|', f.Name.Replace('|', '/'), f.Host, f.Port,
+                info is null ? "" : info.Ping, info is null ? "" : info.Players, info is null ? "" : info.MaxPlayers,
+                JoinRequests.StateCode(info, queried));
+        });
+        var path = Path.Combine(dir, "favorites.txt");
+        File.WriteAllLines(path + ".tmp", lines, new System.Text.UTF8Encoding(false));
+        File.Move(path + ".tmp", path, overwrite: true);
     }
 }

@@ -55,6 +55,7 @@ local Config = {
     SaveFunction = "RequestSaveCartelProgress",
     Advertise = "false",
     AutoStartLobby = "true",
+    GamePopups = "true",
 }
 do
     local f = io.open((ModDir() or ".") .. "\\config.txt", "r")
@@ -163,12 +164,43 @@ local function FunctionParams(fn)
         if okParm and not isParm then return end
         local okRet, isRet = pcall(function() return p:HasAnyPropertyFlags(CPF_ReturnParm) end)
         if okRet and isRet then return end
-        table.insert(list, { name = p:GetFName():ToString(), type = p:GetClass():GetFName():ToString() })
+        table.insert(list, { name = p:GetFName():ToString(), type = p:GetClass():GetFName():ToString(), prop = p })
     end)
     return list
 end
 
-local function Convert(value, ptype)
+local function Normalize(s)
+    local n = (s or ""):lower():gsub("[%s_]", "")
+    return n
+end
+
+local Convert
+
+-- Blueprint-Strukturen: Felder heißen intern "Name_12_ABCDEF…"; zugeordnet wird über den Teil vor der Nummer.
+-- Nicht angegebene Unterstrukturen werden aus denselben (flachen) Werten befüllt.
+local function BuildStruct(prop, values, depth)
+    local okS, st = pcall(function() return prop:GetStruct() end)
+    if not okS or not st then return values end
+    local lookup = {}
+    for k, v in pairs(values) do
+        if type(k) == "string" then lookup[Normalize(k)] = v end
+    end
+    local out = {}
+    st:ForEachProperty(function(p)
+        local name = p:GetFName():ToString()
+        local ptype = p:GetClass():GetFName():ToString()
+        local v = lookup[Normalize((name:gsub("_%d+_%x+$", "")))]
+        if v ~= nil then
+            out[name] = Convert(v, ptype, p, (depth or 0) + 1)
+        elseif ptype == "StructProperty" and (depth or 0) < 3 then
+            local nested = BuildStruct(p, values, (depth or 0) + 1)
+            if next(nested) ~= nil then out[name] = nested end
+        end
+    end)
+    return out
+end
+
+Convert = function(value, ptype, prop, depth)
     if ptype == "BoolProperty" then
         if type(value) == "string" then return value:lower() == "true" or value == "1" end
         return value and true or false
@@ -177,15 +209,13 @@ local function Convert(value, ptype)
     elseif ptype == "TextProperty" then return MakeText(value ~= nil and tostring(value) or "")
     elseif ptype:find("Int") or ptype == "ByteProperty" or ptype == "FloatProperty"
         or ptype == "DoubleProperty" or ptype == "EnumProperty" then return tonumber(value) or 0
-    elseif ptype == "StructProperty" or ptype == "ArrayProperty" or ptype == "MapProperty" or ptype == "SetProperty" then
+    elseif ptype == "StructProperty" then
+        if type(value) == "table" and prop and getmetatable(value) == nil then return BuildStruct(prop, value, depth) end
+        return value ~= nil and value or {}
+    elseif ptype == "ArrayProperty" or ptype == "MapProperty" or ptype == "SetProperty" then
         return type(value) == "table" and value or {}
     end
     return value
-end
-
-local function Normalize(s)
-    local n = (s or ""):lower():gsub("[%s_]", "")
-    return n
 end
 
 -- named: { ParamName = Wert } (Groß/Klein und Leerzeichen egal) oder Liste von Werten nach Position
@@ -201,7 +231,9 @@ local function CallNamed(obj, name, named)
     for i, p in ipairs(params) do
         local v = lookup[Normalize(p.name)]
         if v == nil and named then v = named[i] end
-        args[i] = Convert(v, p.type)
+        -- Struktur-Parameter ohne eigenen Eintrag: Felder aus den übrigen benannten Werten füllen
+        if v == nil and p.type == "StructProperty" and next(lookup) ~= nil then v = named end
+        args[i] = Convert(v, p.type, p.prop)
         table.insert(sig, p.name .. ":" .. p.type:gsub("Property$", ""))
     end
     local ok, err = pcall(function()
@@ -475,6 +507,10 @@ local function HandleCommand(line)
         if arg ~= "" then WORLD = arg end
         SetLoadState(WORLD ~= "" and "wait" or "off")
         Event("INFO", "Lade Welt '" .. WORLD .. "', sobald das Hauptmenü erreicht ist")
+    elseif cmd == "quit" then
+        -- Launcher startet das Spiel neu (z. B. neues Server-Passwort)
+        Event("INFO", "Spiel wird auf Wunsch von DDS2 Multiplayer beendet")
+        Quit()
     elseif cmd == "call" then DoCall(arg)
     elseif cmd == "dump" then DoDump(arg)
     else Event("WARN", "Unbekannter Befehl: " .. cmd) end
@@ -530,7 +566,8 @@ if okMenu then
     local okInit, err = pcall(Menu.Init, {
         Log = Log, Event = Event, IsLive = IsLive, Kismet = Kismet, MakeText = MakeText,
         LocalController = LocalController, DefaultPort = DEFAULT_PORT,
-        DirectIpActive = IPC_DIR ~= nil,
+        DirectIpActive = IPC_DIR ~= nil, IpcDir = IPC_DIR, ToStr = ToStr,
+        CallNamed = CallNamed, GamePopups = Config.GamePopups ~= "false",
     })
     if not okInit then
         Log("Menü deaktiviert: " .. tostring(err))

@@ -31,6 +31,10 @@ public sealed class ClientForm : Form
 
     readonly IpcChannel _ipc = new(Path.Combine(ModInfo.AppDataDir, "ipc-client"));
     List<Favorite> _favoriteList = Favorites.Load();
+    readonly Dictionary<Favorite, ServerInfo?> _infos = new();
+    string _activePassword = "";     // Passwort, mit dem das laufende Spiel gestartet wurde
+    bool _joinBusy;
+    (string Host, int Port)? _restartTarget;
     Process? _game;
     string _expectedMode = "";
     string _target = "";
@@ -141,6 +145,7 @@ public sealed class ClientForm : Form
                 var f = (Favorite)item.Tag!;
                 var ep = await ResolveAsync(f.Host, f.EffectiveQueryPort);
                 var info = ep is null ? null : await ServerQuery.QueryAsync(ep, attempts: 2);
+                _infos[f] = info;
                 if (item.ListView is null) return; // Liste wurde inzwischen neu aufgebaut
                 item.SubItems[2].Text = info is null ? "–" : $"{info.Ping} ms";
                 item.SubItems[3].Text = info is null ? "–" : $"{info.Players}/{info.MaxPlayers}";
@@ -150,6 +155,8 @@ public sealed class ClientForm : Form
                     : "startet";
                 item.ForeColor = info is { IsJoinable: true } && info.ModVersion == ModInfo.Version ? SystemColors.WindowText : SystemColors.GrayText;
             }));
+            // Für die Favoritenliste im Menü des Spiels
+            try { Favorites.ExportForGame(_favoriteList, _infos); } catch (IOException) { }
         }
         finally { _refreshing = false; }
     }
@@ -272,6 +279,7 @@ public sealed class ClientForm : Form
         {
             SaveBackup.Create();
             IniOverride.Apply(new OverrideSettings(listenPort, 3, _password.Text));
+            _activePassword = _password.Text;
             _ipc.Reset();
             _game = GameProcess.Launch(gameDir, "client", _ipc.Dir, gameArgs);
         }
@@ -301,8 +309,43 @@ public sealed class ClientForm : Form
         SetStatus("Spiel über Steam gestartet – ohne Mod-Einstellungen, Steam-Koop funktioniert normal.");
     }
 
+    /// <summary>Beitritt aus dem Menü im Spiel: Server prüfen und dem Spiel antworten.</summary>
+    async Task HandleJoinRequestAsync(JoinRequest req)
+    {
+        _joinBusy = true;
+        try
+        {
+            var fav = _favoriteList.FirstOrDefault(f => f.Host.Equals(req.Host, StringComparison.OrdinalIgnoreCase) && f.Port == req.Port);
+            var gameDir = GameLocator.FindGameDir();
+            var r = await JoinRequests.EvaluateAsync(req, _activePassword, gameDir is null ? "" : GameLocator.ReadBuildId(gameDir),
+                fav?.EffectiveQueryPort ?? ServerQuery.DefaultQueryPort(req.Port));
+            JoinRequests.Respond(_ipc.Dir, req.Id, r);
+            if (r.Result == "restart" && r.NewPassword != null)
+            {
+                // Das Passwort gehört zur Netzwerk-Version, die das Spiel nur beim Start liest.
+                _password.Text = r.NewPassword;
+                _restartTarget = (req.Host, req.Port);
+                SetStatus($"Neues Passwort für {req.Host}:{req.Port} – das Spiel startet neu und verbindet dann ...");
+                _ipc.Send("quit");
+            }
+            else if (r.Result != "ok")
+                SetStatus(r.Message, error: true);
+        }
+        catch (IOException ex) { SetStatus($"Anfrage aus dem Spiel fehlgeschlagen: {ex.Message}", error: true); }
+        finally { _joinBusy = false; }
+    }
+
     void Poll()
     {
+        var refresh = Path.Combine(_ipc.Dir, JoinRequests.RefreshFile);
+        if (File.Exists(refresh))
+        {
+            try { File.Delete(refresh); } catch (IOException) { }
+            _ = RefreshServerInfoAsync();
+        }
+        if (!_joinBusy && JoinRequests.TryTake(_ipc.Dir) is { } request)
+            _ = HandleJoinRequestAsync(request);
+
         foreach (var e in _ipc.ReadNewEvents())
         {
             if (e.Text.StartsWith("Verbinde (Spielmenü) mit ", StringComparison.Ordinal))
@@ -349,7 +392,14 @@ public sealed class ClientForm : Form
             _game = null;
             if (!GameLocator.IsGameRunning()) IniOverride.RestoreAll();
             SetRunning(false);
-            if (!_gotError) SetStatus("Spiel beendet. Mod-Einstellungen wurden zurückgesetzt.");
+            if (_restartTarget is { } restart)
+            {
+                _restartTarget = null;
+                _host.Text = restart.Host;
+                _port.Value = restart.Port;
+                BeginInvoke(new Action(async () => await ConnectAsync()));
+            }
+            else if (!_gotError) SetStatus("Spiel beendet. Mod-Einstellungen wurden zurückgesetzt.");
         }
     }
 
