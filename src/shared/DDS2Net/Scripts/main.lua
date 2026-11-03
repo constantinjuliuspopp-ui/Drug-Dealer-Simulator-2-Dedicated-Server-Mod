@@ -14,7 +14,10 @@
 ]]
 
 local MOD_VERSION = "@MOD_VERSION@"
-local IPC_DIR = os.getenv("DDS2_IPC_DIR")
+-- Über DDS2 Multiplayer / DDS2 Server gestartet: Umgebungsvariablen gesetzt. Beim normalen Start über Steam
+-- übernimmt ein unsichtbarer Helfer (DDS2Mod.exe, Agent-Modus) den Austausch über einen festen Ordner.
+local LAUNCHED = os.getenv("DDS2_IPC_DIR") ~= nil
+local IPC_DIR = os.getenv("DDS2_IPC_DIR") or ((os.getenv("APPDATA") or ".") .. "\\DDS2Mod\\ipc-game")
 local ROLE = os.getenv("DDS2_ROLE") or "client"
 local WORLD = os.getenv("DDS2_WORLD") or ""
 local DEFAULT_PORT = tonumber(os.getenv("DDS2_DEFAULT_PORT") or "") or 7777
@@ -618,6 +621,27 @@ local function WriteStatus(pc, mode, place)
     end
 end
 
+-- Helfer für Ping/Prüfung/Favoriten: beim Start über den Launcher ist das der Launcher selbst,
+-- sonst der unsichtbare Agent (schreibt alle 0,5 s seine Uhrzeit in agent.txt).
+local function HelperAlive()
+    if LAUNCHED then return true end
+    local f = io.open(IPC_DIR .. "\\agent.txt", "r")
+    if not f then return false end
+    local t = tonumber(f:read("a") or "")
+    f:close()
+    return t ~= nil and math.abs(os.time() - t) < 10
+end
+
+-- Normaler Start: Agent einmal über das vom Installer registrierte Protokoll dds2mod:// starten (ohne Fenster).
+local agentStarted = false
+local function StartAgent(pc)
+    if LAUNCHED or agentStarted or not pc then return end
+    agentStarted = true
+    if HelperAlive() then return end
+    local ok, err = pcall(function() Kismet():LaunchURL("dds2mod://agent") end)
+    Log(ok and "Hintergrund-Helfer gestartet (dds2mod://agent)" or ("Hintergrund-Helfer nicht gestartet: " .. tostring(err)))
+end
+
 -- Menü "Server beitreten" ------------------------------------------------------
 local okMenu
 okMenu, Menu = pcall(require, "menu")
@@ -625,7 +649,7 @@ if okMenu then
     local okInit, err = pcall(Menu.Init, {
         Log = Log, Event = Event, IsLive = IsLive, Kismet = Kismet, MakeText = MakeText,
         LocalController = LocalController, DefaultPort = DEFAULT_PORT,
-        IpcDir = IPC_DIR, ToStr = ToStr,
+        IpcDir = IPC_DIR, ToStr = ToStr, HelperAlive = HelperAlive,
         CallNamed = CallNamed, GameLoop = GameLoop,
     })
     if not okInit then
@@ -694,7 +718,7 @@ end
 
 -- Über DDS2 Multiplayer / DDS2 Server gestartet: immer über IP hosten. Bei normalem Start über Steam nur mit
 -- IpHosting=true in config.txt – sonst blieben Steam-Einladungen und Steam-Koop wie gewohnt (die gehen nur über Steam-P2P).
-if IPC_DIR or Config.IpHosting == "true" then
+if LAUNCHED or Config.IpHosting == "true" then
     -- UGameplayStatics::OpenLevel(WorldContextObject, LevelName, bAbsolute, Options)
     TryHook("/Script/Engine.GameplayStatics:OpenLevel", function(_, _, _, _, options) PatchParam(options, "OpenLevel") end)
     TryHook("/Script/Engine.GameplayStatics:OpenLevelBySoftObjectPtr", function(_, _, _, _, options) PatchParam(options, "OpenLevel") end)
@@ -795,6 +819,7 @@ end
 local function Tick()
     local pc = LocalController()
     local place = Place(pc)
+    StartAgent(pc)
     ApplyMaxFps(pc, place)
     local okHide, errHide = pcall(HideHostCharacter, pc, place)
     if not okHide then Log("Server-Figur: " .. tostring(errHide)) end

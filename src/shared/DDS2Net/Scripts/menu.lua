@@ -506,7 +506,7 @@ local function RequestJoin(host, port, displayName)
     port = port or ctx.DefaultPort
     -- Normaler Spielstart über Steam (ohne DDS2 Multiplayer): keine Vorabprüfung möglich, direkt verbinden.
     -- Das klappt über den Passthrough des SteamNetDriver; nur passwortgeschützte Server brauchen den Launcher.
-    if not ctx.IpcDir then
+    if not ctx.HelperAlive() then
         OpenLevel(host, port, displayName)
         return
     end
@@ -569,6 +569,29 @@ local function CheckPending()
         ctx.Log("Menü: keine Antwort von DDS2 Multiplayer – verbinde ohne Prüfung")
         OpenLevel(p.host, p.port, p.name)
     end
+end
+
+-- Favorit aus den Feldern speichern bzw. entfernen; der Helfer (Agent oder Launcher) schreibt favorites.json
+local function EditFavorite(add)
+    local host, inlinePort = TextOf(ui.address):match("^%s*([^:%s|]+):?(%d*)%s*$")
+    local port = tonumber(inlinePort) or tonumber((TextOf(ui.port):match("^%s*(%d+)%s*$"))) or ctx.DefaultPort
+    if not host then
+        ShowError("Bitte zuerst IP oder Hostname eintragen.")
+        return
+    end
+    if not ctx.HelperAlive() then
+        ShowError("Favoriten lassen sich gerade nicht speichern: Der Hintergrund-Helfer läuft nicht. Spiel neu starten oder DDS2 Multiplayer benutzen.")
+        return
+    end
+    local f = io.open(IpcPath("favorite-request.txt"), "a")
+    if not f then
+        ShowError("Favoriten-Datei nicht beschreibbar.")
+        return
+    end
+    f:write((add and ("add|" .. host .. "|" .. host .. "|" .. port) or ("remove|" .. host .. "|" .. port)) .. "\n")
+    f:close()
+    SetStatus(add and ("Favorit " .. host .. ":" .. port .. " gespeichert.") or ("Favorit " .. host .. ":" .. port .. " entfernt."))
+    lastFavRead = os.time() - 1 -- Liste gleich neu einlesen (der Helfer braucht ~1 s)
 end
 
 local function ConnectTyped()
@@ -745,8 +768,14 @@ local function BuildWindow(menu, w, src)
     AddH(inputs, Column(tree, src, "Passwort", passwordBox), 16)
     AddV(body, inputs, 22, center)
 
+    local actions = New("HorizontalBox", tree)
     w.connect = MakeButton(tree, src.apply, "Verbinden")
-    AddV(body, w.connect, 18, center)
+    w.saveFav = MakeButton(tree, src.cancel, "Als Favorit speichern")
+    w.removeFav = MakeButton(tree, src.cancel, "Favorit entfernen")
+    AddH(actions, w.connect, 0)
+    AddH(actions, w.saveFav, 16)
+    AddH(actions, w.removeFav, 16)
+    AddV(body, actions, 18, center)
 
     AddV(body, Label(tree, UpperDE("Favoriten"), src.title, 16), 30, center)
     AddV(body, (MakeRow(tree, { "NAME", "ADRESSE", "PING", "SPIELER", "STATUS" }, src.subtitle, nil, true)), 8)
@@ -756,10 +785,6 @@ local function BuildWindow(menu, w, src)
     AddV(body, w.noFavs, 4, center)
     w.rows = {}
 
-    if not ctx.IpcDir then
-        AddV(body, Label(tree, "Normal über Steam gestartet: Verbinden geht, Ping und Prüfung vor dem Verbinden nur mit \"DDS2 Multiplayer\".",
-            src.subtitle, nil, COLOR_DIM), 14, center)
-    end
     -- Statuszeile mit fester Breite und Umbruch, damit lange Fehlermeldungen die Tabelle nicht verschieben
     w.status = Label(tree, "", src.subtitle, nil)
     pcall(function() w.status:SetAutoWrapText(true) end)
@@ -984,6 +1009,8 @@ function M.Init(context)
         if Hovered(ui.entry) then SetOpen(not isOpen) return end
         if not isOpen then return end
         if Hovered(ui.connect) then ConnectTyped() return end
+        if Hovered(ui.saveFav) then EditFavorite(true) return end
+        if Hovered(ui.removeFav) then EditFavorite(false) return end
         if Hovered(ui.cancel) then SetOpen(false) return end
         for _, row in ipairs(ui.rows) do
             if Hovered(row.button) then

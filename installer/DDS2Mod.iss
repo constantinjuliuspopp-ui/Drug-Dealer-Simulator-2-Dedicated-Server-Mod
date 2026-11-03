@@ -62,6 +62,12 @@ Source: "{#StageDir}\game\*"; DestDir: "{code:GameWin64}"; Flags: ignoreversion 
 Source: "{#StageDir}\server\server.cfg"; DestDir: "{code:ServerDir}"; Components: server; Flags: onlyifdoesntexist uninsneveruninstall
 Source: "{#StageDir}\server\install_server.bat"; DestDir: "{code:ServerDir}"; Components: server; Flags: ignoreversion
 
+[Registry]
+; Protokoll dds2mod:// – die Mod startet damit beim normalen Spielstart den unsichtbaren Helfer (DDS2Mod.exe, Agent-Modus)
+Root: HKA; Subkey: "Software\Classes\dds2mod"; ValueType: string; ValueName: ""; ValueData: "URL:DDS2 Multiplayer Mod"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\dds2mod"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\dds2mod\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+
 [Icons]
 Name: "{group}\DDS2 Multiplayer"; Filename: "{app}\{#AppExe}"; Components: client
 Name: "{group}\DDS2 Server starten"; Filename: "{app}\{#ServerExe}"; Parameters: "--config ""{code:ServerDir}\server.cfg"""; WorkingDir: "{code:ServerDir}"; Components: server

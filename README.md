@@ -73,8 +73,10 @@ Es öffnet sich ein Fenster im Stil des Spiels:
   verbindet dann automatisch.
 - **ABBRECHEN**, **Esc** oder ein Klick auf den Hintergrund schließt das Fenster.
 
-**Normaler Start über Steam:** Auch dann steht im Hauptmenü **SERVER BEITRETEN**, und du kannst Servern ohne Passwort
-direkt beitreten. Nur Ping-Anzeige, Prüfung vor dem Verbinden und passwortgeschützte Server brauchen DDS2 Multiplayer.
+**Normaler Start über Steam – nur das Spiel, kein weiteres Fenster:** Die Mod lädt bei jedem Spielstart. Im Hauptmenü
+steht **SERVER BEITRETEN** mit Favoriten (Ping, Spielerzahl, Status), **ALS FAVORIT SPEICHERN** und **FAVORIT ENTFERNEN**.
+Dafür startet die Mod einen unsichtbaren Helfer (`DDS2Mod.exe` im Hintergrund, ohne Fenster), der sich mit dem Spiel
+wieder beendet. Nur passwortgeschützte Server brauchen den Start über DDS2 Multiplayer.
 Hosten über IP passiert bei normalem Start nur mit `IpHosting=true` in
 `…\Binaries\Win64\ue4ss\Mods\DDS2Net\config.txt` – sonst bleiben Steam-Einladungen wie gewohnt.
 

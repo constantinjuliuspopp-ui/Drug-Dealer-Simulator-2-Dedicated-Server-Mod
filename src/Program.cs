@@ -18,6 +18,10 @@ static class Program
             return 0;
         }
 
+        // Unsichtbarer Helfer beim normalen Spielstart: die Mod öffnet "dds2mod://agent" (siehe AgentMode).
+        if (HasFlag(args, "--agent") || args.Any(a => a.StartsWith("dds2mod:", StringComparison.OrdinalIgnoreCase)))
+            return AgentMode.Run();
+
         // Wird vom Deinstallationsprogramm aufgerufen.
         if (HasFlag(args, "--restore"))
         {

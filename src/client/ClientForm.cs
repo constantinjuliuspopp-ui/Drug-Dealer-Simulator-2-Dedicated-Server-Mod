@@ -423,6 +423,14 @@ public sealed class ClientForm : Form
         }
         if (!_joinBusy && JoinRequests.TryTake(_ipc.Dir) is { } request)
             _ = HandleJoinRequestAsync(request);
+        // Favorit speichern/entfernen aus dem Menü im Spiel
+        if (AgentMode.ApplyFavoriteRequests(_ipc.Dir))
+        {
+            _favoriteList = Favorites.Load();
+            _infos.Clear();
+            RefreshFavorites();
+            _ = RefreshServerInfoAsync();
+        }
 
         foreach (var e in _ipc.ReadNewEvents())
         {
