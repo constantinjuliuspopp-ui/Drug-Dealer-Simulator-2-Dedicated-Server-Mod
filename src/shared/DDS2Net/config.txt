@@ -17,3 +17,7 @@ AutoStartLobby=
 # true: Mitspieler können per IP:7777 beitreten, aber Steam-Einladungen/Steam-Koop funktionieren dann nicht.
 # Über DDS2 Multiplayer bzw. DDS2 Server gestartet wird immer über IP gehostet.
 IpHosting=
+
+# Intro beim Spielstart: Logo "DEDICATED SERVER" (Images\intro_logo.png) und "Prime Mods" bei den Entwicklern
+# (true/false, Standard true)
+CustomIntro=

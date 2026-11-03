@@ -79,6 +79,8 @@ Dafür startet die Mod einen unsichtbaren Helfer (`DDS2Mod.exe` im Hintergrund, 
 wieder beendet. Nur passwortgeschützte Server brauchen den Start über DDS2 Multiplayer.
 Hosten über IP passiert bei normalem Start nur mit `IpHosting=true` in
 `…\Binaries\Win64\ue4ss\Mods\DDS2Net\config.txt` – sonst bleiben Steam-Einladungen wie gewohnt.
+Im Intro beim Spielstart zeigt die Mod das Logo „DEDICATED SERVER“ und bei den Entwicklern zusätzlich
+„Prime Mods“ (abschaltbar mit `CustomIntro=false` in derselben `config.txt`).
 
 **Normal starten (Steam-Koop)** startet das Spiel ohne Mod-Einstellungen – dann funktionieren
 Steam-Einladungen wie gewohnt.
