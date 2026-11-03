@@ -3,7 +3,7 @@
 Direkt-IP-Multiplayer und Dedicated Server für **Drug Dealer Simulator 2** (Steam, Windows).
 Inoffizielle Fan-Mod, nicht von den Entwicklern des Spiels.
 
-> **Version 0.5.1 – Server und Menü auf einem PC im Spiel getestet, Beitritt von einem zweiten PC noch ungetestet.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
+> **Version 0.5.3 – Dedicated Server auf eigenem PC und Beitritt im Heimnetz im Spiel getestet.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
 > Bitte Rückmeldung geben, was funktioniert und was nicht.
 
 ## Was die Mod kann
@@ -72,6 +72,11 @@ Es öffnet sich ein Fenster im Stil des Spiels:
 - Ein **neues Passwort** übernimmt das Spiel nur beim Start: Ist es richtig, startet das Spiel einmal neu und
   verbindet dann automatisch.
 - **ABBRECHEN**, **Esc** oder ein Klick auf den Hintergrund schließt das Fenster.
+
+**Normaler Start über Steam:** Auch dann steht im Hauptmenü **SERVER BEITRETEN**, und du kannst Servern ohne Passwort
+direkt beitreten. Nur Ping-Anzeige, Prüfung vor dem Verbinden und passwortgeschützte Server brauchen DDS2 Multiplayer.
+Hosten über IP passiert bei normalem Start nur mit `IpHosting=true` in
+`…\Binaries\Win64\ue4ss\Mods\DDS2Net\config.txt` – sonst bleiben Steam-Einladungen wie gewohnt.
 
 **Normal starten (Steam-Koop)** startet das Spiel ohne Mod-Einstellungen – dann funktionieren
 Steam-Einladungen wie gewohnt.
@@ -154,6 +159,7 @@ auf dem Server-PC. Ab dann liegen **Welt und Fortschritt auf dem Server**.
 | `AutoRestart` | Spiel nach Absturz neu starten (höchstens 3× in 10 Minuten) |
 | `TickRate` | Spiel-Takte pro Sekunde, Standard 30 (spart ~90 % CPU gegenüber unbegrenzt); 0 = unbegrenzt |
 | `StartSteam` | Steam unsichtbar starten, falls es nicht läuft (Standard `true`) |
+| `HideServerCharacter` | Figur des Server-Kontos unsichtbar samt Namensschild, ohne Kollision, 100 m hoch geparkt, für NPCs/Polizei abgemeldet (Standard `true`) |
 | `GameDir` | Spielordner, falls nicht automatisch gefunden |
 
 ### Automatisch starten
@@ -251,6 +257,11 @@ Logs für Fehlerberichte:
 | `installer/` | Inno-Setup-Skript, UE4SS-Modliste |
 | `tools/` | Proof-of-Concept-Skripte, `iostore-names` (liest Namen aus den Spiel-Paketen, nur lesen) |
 | `docs/` | Analysen, Testanleitungen |
+
+Direkt-IP: Das Spiel hostet über den `SteamNetDriver` (Steam-P2P, kein UDP-Spielport). Die Mod hängt beim Hosten
+`?bIsLanMatch` an die Listen-URL (Hook auf `GameplayStatics:OpenLevel`), dann lauscht der Treiber im Passthrough-Modus auf
+UDP 7777. Clients, die mit einer IP verbinden, nutzen den Passthrough automatisch. Den Treiber gegen `IpNetDriver` zu
+tauschen (Engine.ini oder zur Laufzeit) bricht den Koop-Start des Spiels ab.
 
 Abfrage-Protokoll (UDP, Text): Anfrage `DDS2Q|1|<nonce>` auf 128 Byte aufgefüllt, Antwort `DDS2R|1|<nonce>` plus Zeilen
 `name= mod= protocol= build= state= players= max= password= world= challenge=`. Passwortprüfung per

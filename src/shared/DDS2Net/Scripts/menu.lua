@@ -28,6 +28,7 @@ local lastStatus
 local counter = 0
 local pending       -- laufende Anfrage an den Launcher
 local forceTarget   -- nach "antwortet nicht": erneuter Klick verbindet ohne Prüfung
+local connectAttempt -- letzter "open": kommt das Hauptmenü kurz danach wieder, ist die Verbindung gescheitert
 local requestCounter = 0
 local anim          -- Einblend-Animation
 local warned = {}
@@ -487,6 +488,7 @@ local function OpenLevel(host, port, displayName)
     end
     SetStatus("Verbinde mit " .. (displayName and displayName ~= "" and (displayName .. " (" .. target .. ")") or target) .. " ...")
     ctx.Event("INFO", "Verbinde (Spielmenü) mit " .. target)
+    connectAttempt = { target = target, t = os.time() }
     ctx.Kismet():ExecuteConsoleCommand(pc, "open " .. target, pc)
 end
 
@@ -496,16 +498,18 @@ local function TextOf(input)
 end
 
 local function RequestJoin(host, port, displayName)
-    if not ctx.DirectIpActive then
-        ShowError("Direkt-IP ist nur aktiv, wenn das Spiel über \"DDS2 Multiplayer\" gestartet wurde.", "DIREKT-IP AUS")
-        return
-    end
     if not host or host == "" then
         ShowError("Bitte eine IP-Adresse oder einen Hostnamen eingeben.", "ADRESSE FEHLT")
         return
     end
     if pending then return end
     port = port or ctx.DefaultPort
+    -- Normaler Spielstart über Steam (ohne DDS2 Multiplayer): keine Vorabprüfung möglich, direkt verbinden.
+    -- Das klappt über den Passthrough des SteamNetDriver; nur passwortgeschützte Server brauchen den Launcher.
+    if not ctx.IpcDir then
+        OpenLevel(host, port, displayName)
+        return
+    end
     if forceTarget and forceTarget.host == host and forceTarget.port == port and os.time() - forceTarget.t < 60 then
         forceTarget = nil
         OpenLevel(host, port, displayName)
@@ -752,8 +756,9 @@ local function BuildWindow(menu, w, src)
     AddV(body, w.noFavs, 4, center)
     w.rows = {}
 
-    if not ctx.DirectIpActive then
-        AddV(body, Label(tree, "Hinweis: Spiel über \"DDS2 Multiplayer\" starten, sonst ist Direkt-IP aus.", src.subtitle, nil, COLOR_ERROR), 14, center)
+    if not ctx.IpcDir then
+        AddV(body, Label(tree, "Normal über Steam gestartet: Verbinden geht, Ping und Prüfung vor dem Verbinden nur mit \"DDS2 Multiplayer\".",
+            src.subtitle, nil, COLOR_DIM), 14, center)
     end
     -- Statuszeile mit fester Breite und Umbruch, damit lange Fehlermeldungen die Tabelle nicht verschieben
     w.status = Label(tree, "", src.subtitle, nil)
@@ -863,6 +868,25 @@ function M.Tick()
     favText = nil
     SetOpen(isOpen)
     if lastStatus then SetStatus(lastStatus.text, lastStatus.isError) end
+    -- Zurück im Hauptmenü kurz nach einem Verbindungsversuch, ohne dass das Spiel einen Fehler gemeldet hat:
+    -- typischerweise kam vom Spielport des Servers keine Antwort (Firewall am Server, falscher Port).
+    if connectAttempt and os.time() - connectAttempt.t < 120 then
+        local target, elapsed = connectAttempt.target, os.time() - connectAttempt.t
+        connectAttempt = nil
+        isOpen = true
+        SetOpen(true)
+        if elapsed <= 5 then
+            -- sofort zurück: der Server hat abgelehnt (z. B. Version/Passwort), keine Zeitüberschreitung
+            ShowError("Keine Verbindung zu " .. target .. ": Der Server hat sofort abgelehnt. Haben Server und Spieler dieselbe "
+                .. "Mod-Version? Ist ein Passwort gesetzt? Läuft am Server die Welt?")
+            ctx.Event("NETERROR", "PendingConnectionFailure (sofort abgelehnt von " .. target .. ")")
+        else
+            ShowError("Keine Verbindung zu " .. target .. ": Der Spielport hat nicht geantwortet. Am Server-PC die Windows-Firewall "
+                .. "für DrugDealerSimulator2-Win64-Shipping.exe prüfen (UDP " .. (target:match(":(%d+)$") or "7777") .. ").")
+            ctx.Event("NETERROR", "ConnectionTimeout (keine Antwort vom Spielport " .. target .. ")")
+        end
+    end
+    connectAttempt = nil
 end
 
 -- Widget-Baum als Text (Diagnose zum Nachbauen von Fenstern des Spiels)
@@ -921,6 +945,7 @@ end
 
 function M.ShowError(text)
     pending = nil
+    connectAttempt = nil -- das Spiel hat den Fehler selbst gemeldet
     ShowError(text)
 end
 

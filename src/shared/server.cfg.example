@@ -30,6 +30,9 @@ TickRate=30
 # Läuft Steam nicht, startet der Server es unsichtbar und wartet auf die Anmeldung.
 # Dafür einmal von Hand mit dem Server-Konto anmelden und "Angemeldet bleiben" anhaken.
 StartSteam=true
+# Die Figur des Server-Kontos (der Server ist im Spiel technisch ein Spieler) verstecken:
+# unsichtbar samt Namen, ohne Kollision, 100 m hoch geparkt, für NPCs/Polizei abgemeldet.
+HideServerCharacter=true
 # Spielordner (mit DrugDealerSimulator2.exe). Leer = automatisch über Steam suchen.
 # Bei Installation per SteamCMD hier den Ordner eintragen.
 GameDir=

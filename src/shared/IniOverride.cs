@@ -18,36 +18,36 @@ public static class IniOverride
     static readonly string[] Files = { "Engine.ini", "Game.ini" };
 
     /// <summary>
-    /// Fließt in die Netzwerk-Version der Engine ein. Abweichende Mod-Version oder
-    /// abweichendes Passwort führen dadurch zur Ablehnung "inkompatible Version".
+    /// Fließt in die Netzwerk-Version der Engine ein: ein abweichendes Passwort führt zur Ablehnung
+    /// "inkompatible Version". Nur mit Passwort gesetzt – ohne Passwort bleibt die Netzwerk-Version
+    /// die des Spiels, damit auch Spieler ohne Launcher (normaler Start über Steam) beitreten können.
     /// </summary>
     public static string NetworkVersionTag(string password) =>
-        string.IsNullOrEmpty(password)
-            ? $"DDS2Mod-{ModInfo.Version}"
-            : $"DDS2Mod-{ModInfo.Version}-{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password)))[..8].ToLowerInvariant()}";
+        $"DDS2Mod-{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password)))[..8].ToLowerInvariant()}";
 
+    /// <summary>
+    /// Der Netzwerk-Treiber wird hier bewusst NICHT umgestellt: Das Spiel hostet über den SteamNetDriver, und
+    /// Direkt-IP läuft über dessen Passthrough (siehe DDS2Net main.lua, ?bIsLanMatch). Ein IpNetDriver-Eintrag
+    /// in der Engine.ini kam im Spiel ohnehin nicht an.
+    /// </summary>
     public static void Apply(OverrideSettings s, string? configDir = null)
     {
         configDir ??= GameLocator.ConfigDir;
         Directory.CreateDirectory(configDir);
         ApplyFile(Path.Combine(configDir, "Engine.ini"), $"""
             {BlockStart}
-            [/Script/Engine.GameEngine]
-            !NetDriverDefinitions=ClearArray
-            +NetDriverDefinitions=(DefName="GameNetDriver",DriverClassName="/Script/OnlineSubsystemUtils.IpNetDriver",DriverClassNameFallback="/Script/OnlineSubsystemUtils.IpNetDriver")
-            +NetDriverDefinitions=(DefName="BeaconNetDriver",DriverClassName="/Script/OnlineSubsystemUtils.IpNetDriver",DriverClassNameFallback="/Script/OnlineSubsystemUtils.IpNetDriver")
-            +NetDriverDefinitions=(DefName="DemoNetDriver",DriverClassName="/Script/Engine.DemoNetDriver",DriverClassNameFallback="/Script/Engine.DemoNetDriver")
-
             [URL]
             Port={s.Port}
             {BlockEnd}
             """);
-        ApplyFile(Path.Combine(configDir, "Game.ini"), $"""
-            {BlockStart}
+        var version = string.IsNullOrEmpty(s.Password) ? "" : $"""
             [/Script/EngineSettings.GeneralProjectSettings]
             ProjectVersion={NetworkVersionTag(s.Password)}
 
-            [/Script/Engine.GameSession]
+            """;
+        ApplyFile(Path.Combine(configDir, "Game.ini"), $"""
+            {BlockStart}
+            {version}[/Script/Engine.GameSession]
             MaxPlayers={s.MaxPlayers}
             {BlockEnd}
             """);

@@ -13,3 +13,7 @@ Advertise=
 # Server-Modus: in der Lobby automatisch "Spiel starten" auslösen (true/false, Standard true)
 AutoStartLobby=
 
+# Bei normalem Spielstart über Steam ebenfalls über IP hosten (true/false, Standard false).
+# true: Mitspieler können per IP:7777 beitreten, aber Steam-Einladungen/Steam-Koop funktionieren dann nicht.
+# Über DDS2 Multiplayer bzw. DDS2 Server gestartet wird immer über IP gehostet.
+IpHosting=

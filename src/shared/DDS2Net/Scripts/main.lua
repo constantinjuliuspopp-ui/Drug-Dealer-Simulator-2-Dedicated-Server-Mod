@@ -57,6 +57,7 @@ local Config = {
     SaveFunction = "RequestSaveCartelProgress",
     Advertise = "false",
     AutoStartLobby = "true",
+    IpHosting = "false",
 }
 do
     local f = io.open((ModDir() or ".") .. "\\config.txt", "r")
@@ -472,6 +473,34 @@ local function DoCall(arg)
     Event(ok and "INFO" or "ERROR", "call " .. className .. ":" .. fname .. "(" .. sig .. ") -> " .. (ok and "ok" or tostring(err)))
 end
 
+-- Diagnose "pawns": alle Spielfiguren mit Spielername, Sichtbarkeit und Komponenten (für Namensschilder usw.)
+local function DoPawns()
+    local out = {}
+    for _, pawn in ipairs(FindAllOf("Character") or {}) do
+        if IsLive(pawn) then
+            local name = "?"
+            pcall(function() local ps = pawn.PlayerState; if ps and ps:IsValid() then name = PlayerName(ps) end end)
+            local hiddenFlag, z = "?", "?"
+            pcall(function() hiddenFlag = tostring(pawn.bHidden) end)
+            pcall(function() z = string.format("%.0f", pawn:K2_GetActorLocation().Z) end)
+            table.insert(out, pawn:GetClass():GetFName():ToString() .. "  Spieler=" .. name .. "  bHidden=" .. hiddenFlag .. "  Z=" .. z)
+            local id = pawn:GetAddress()
+            for _, cls in ipairs({ "WidgetComponent", "TextRenderComponent", "AIPerceptionStimuliSourceComponent" }) do
+                for _, comp in ipairs(FindAllOf(cls) or {}) do
+                    local ok, owner = pcall(function() return comp:GetOwner() end)
+                    if ok and owner and owner:IsValid() and owner:GetAddress() == id then
+                        table.insert(out, "    " .. cls .. " " .. comp:GetFName():ToString())
+                    end
+                end
+            end
+        end
+    end
+    local path = (IPC_DIR or ModDir() or ".") .. "\\pawns.txt"
+    local f = io.open(path, "w")
+    if f then f:write(table.concat(out, "\n") .. "\n") f:close() end
+    Event("INFO", "pawns: " .. #out .. " Zeilen -> " .. path)
+end
+
 local function DoDump(className)
     local obj = FirstLive(className)
     if not obj then
@@ -528,6 +557,7 @@ local function HandleCommand(line)
         if Menu then Menu.Command(arg) else Event("WARN", "menu: Menü nicht geladen") end
     elseif cmd == "call" then DoCall(arg)
     elseif cmd == "dump" then DoDump(arg)
+    elseif cmd == "pawns" then DoPawns()
     else Event("WARN", "Unbekannter Befehl: " .. cmd) end
 end
 
@@ -595,7 +625,7 @@ if okMenu then
     local okInit, err = pcall(Menu.Init, {
         Log = Log, Event = Event, IsLive = IsLive, Kismet = Kismet, MakeText = MakeText,
         LocalController = LocalController, DefaultPort = DEFAULT_PORT,
-        DirectIpActive = IPC_DIR ~= nil, IpcDir = IPC_DIR, ToStr = ToStr,
+        IpcDir = IPC_DIR, ToStr = ToStr,
         CallNamed = CallNamed, GameLoop = GameLoop,
     })
     if not okInit then
@@ -613,11 +643,21 @@ local function TryHook(path, fn)
     if not ok then Log("Hook fehlgeschlagen: " .. path .. " (" .. tostring(err) .. ")") end
 end
 
-TryHook("/Script/Engine.GameInstance:HandleNetworkError", function(_, failureType, isServer)
+local lastNetError = 0
+local function OnNetworkError(failureType, isServer)
     local id = failureType:get()
-    Event("NETERROR", (NetworkFailures[id] or tostring(id)) .. (isServer:get() and " (server)" or ""))
+    -- Basis- und Blueprint-Hook können beide auslösen: nur einmal melden
+    if os.time() - lastNetError < 2 then return end
+    lastNetError = os.time()
+    local okServer, server = pcall(function() return isServer:get() end)
+    Event("NETERROR", (NetworkFailures[id] or tostring(id)) .. (okServer and server and " (server)" or ""))
     if Menu then Menu.ShowError("Verbindungsfehler: " .. (NetworkFailures[id] or tostring(id))) end
-end)
+end
+
+TryHook("/Script/Engine.GameInstance:HandleNetworkError", function(_, failureType, isServer) OnNetworkError(failureType, isServer) end)
+-- Das Spiel überschreibt HandleNetworkError in seinem Blueprint – dann löst nur dieser Hook aus.
+TryHook("/Game/Blueprints/SystemClasses/BP_DDS2_GameInstance.BP_DDS2_GameInstance_C:HandleNetworkError",
+    function(_, failureType, isServer) OnNetworkError(failureType, isServer) end)
 
 TryHook("/Script/Engine.GameInstance:HandleTravelError", function(_, failureType)
     local id = failureType:get()
@@ -627,6 +667,41 @@ end)
 
 Log("Version " .. MOD_VERSION .. ", Rolle " .. ROLE .. ", IPC " .. tostring(IPC_DIR) .. ", Welt '" .. WORLD .. "'")
 
+--[[ Direkt-IP beim Hosten: Das Spiel hostet über den SteamNetDriver (Steam-P2P, kein UDP-Spielport).
+     Der SteamNetDriver arbeitet als Server nur dann über normales IP ("Passthrough", lauscht auf dem Port aus
+     der URL, Standard 7777), wenn die Listen-URL die Option bIsLanMatch enthält. Clients, die mit einer IP-Adresse
+     verbinden, nutzen das automatisch. Darum hier: an jeden Level-Aufruf mit "listen" ?bIsLanMatch anhängen.
+     (Den Treiber gegen IpNetDriver zu tauschen bricht den Koop-Start des Spiels ab – im Test ausprobiert.) ]]
+local function WithLanOption(s)
+    if type(s) ~= "string" then return nil end
+    local lower = s:lower()
+    if not lower:find("listen", 1, true) or lower:find("bislanmatch", 1, true) then return nil end
+    return s .. "?bIsLanMatch"
+end
+
+local function PatchParam(param, what)
+    local ok, value = pcall(function() return param:get():ToString() end)
+    if not ok then return end
+    local patched = WithLanOption(value)
+    if not patched then return end
+    local okSet, err = pcall(function() param:set(patched) end)
+    if okSet then
+        Event("INFO", "Direkt-IP: Hosten über IP (" .. what .. " '" .. value .. "' -> '" .. patched .. "')")
+    else
+        Event("ERROR", "Direkt-IP: " .. what .. " nicht angepasst (" .. tostring(err) .. ")")
+    end
+end
+
+-- Über DDS2 Multiplayer / DDS2 Server gestartet: immer über IP hosten. Bei normalem Start über Steam nur mit
+-- IpHosting=true in config.txt – sonst blieben Steam-Einladungen und Steam-Koop wie gewohnt (die gehen nur über Steam-P2P).
+if IPC_DIR or Config.IpHosting == "true" then
+    -- UGameplayStatics::OpenLevel(WorldContextObject, LevelName, bAbsolute, Options)
+    TryHook("/Script/Engine.GameplayStatics:OpenLevel", function(_, _, _, _, options) PatchParam(options, "OpenLevel") end)
+    TryHook("/Script/Engine.GameplayStatics:OpenLevelBySoftObjectPtr", function(_, _, _, _, options) PatchParam(options, "OpenLevel") end)
+    -- Konsolenbefehl "open Karte?listen" bzw. "servertravel …"
+    TryHook("/Script/Engine.KismetSystemLibrary:ExecuteConsoleCommand", function(_, _, command) PatchParam(command, "Befehl") end)
+end
+
 local appliedFpsPlace = nil
 local function ApplyMaxFps(pc, place)
     if not MAX_FPS or MAX_FPS <= 0 or not pc or place == appliedFpsPlace then return end
@@ -635,10 +710,96 @@ local function ApplyMaxFps(pc, place)
     if ok then Log("t.MaxFPS " .. MAX_FPS .. " gesetzt (" .. place .. ")") else Log("t.MaxFPS: " .. tostring(err)) end
 end
 
+--[[ Dedicated Server: die Figur des Server-Kontos verstecken.
+     Das Spiel kennt nur "ein Spieler hostet" – der Server hat deshalb eine eigene Figur in der Welt.
+     Sie wird unsichtbar (bHidden wird an alle Mitspieler repliziert, damit auch ihr Namensschild),
+     ohne Kollision, ohne Bewegung 100 m nach oben geparkt und bei der KI-Wahrnehmung abgemeldet,
+     damit NPCs und Polizei sie nicht beachten. Wird alle 2 s geprüft (z. B. nach Respawn/Teleport). ]]
+local HIDE_HOST = ROLE == "server" and os.getenv("DDS2_HIDE_HOST") == "1"
+local PARK_HEIGHT = 10000 -- cm über der letzten Position
+local hidden = { id = nil, z = nil }
+
+local function Addr(o)
+    local ok, a = pcall(function() return o:GetAddress() end)
+    return ok and a or nil
+end
+
+local function UnregisterPerception(pawn)
+    local id, count = Addr(pawn), 0
+    for _, comp in ipairs(FindAllOf("AIPerceptionStimuliSourceComponent") or {}) do
+        if IsLive(comp) then
+            local okOwner, owner = pcall(function() return comp:GetOwner() end)
+            if okOwner and owner and owner:IsValid() and Addr(owner) == id then
+                if pcall(function() comp:UnregisterFromPerceptionSystem() end) then count = count + 1 end
+            end
+        end
+    end
+    return count
+end
+
+local function HideHostCharacter(pc, place)
+    if not HIDE_HOST or place ~= "world" or not pc then return end
+    local okPawn, pawn = pcall(function() return pc.Pawn end)
+    if not okPawn or not pawn or not pawn:IsValid() then return end
+    local id = Addr(pawn)
+    -- Sichtbarkeit/Kollision jedes Mal setzen (billig), falls das Spiel sie zurücksetzt
+    pcall(function() pawn:SetActorHiddenInGame(true) end)
+    pcall(function() pawn:SetActorEnableCollision(false) end)
+    local okLoc, loc = pcall(function() return pawn:K2_GetActorLocation() end)
+    if hidden.id == id and okLoc and hidden.z and math.abs(loc.Z - hidden.z) < 500 then return end
+    -- neue Figur oder vom Spiel versetzt: parken
+    pcall(function()
+        local mv = pawn.CharacterMovement
+        mv:DisableMovement()
+        mv.GravityScale = 0.0
+    end)
+    local parked = false
+    if okLoc then
+        local target = { X = loc.X, Y = loc.Y, Z = loc.Z + PARK_HEIGHT }
+        parked = pcall(function() pawn:K2_SetActorLocation(target, false, {}, true) end)
+        hidden.z = target.Z
+    end
+    local perception = UnregisterPerception(pawn)
+    local first = hidden.id ~= id
+    hidden.id = id
+    if first then
+        Event("INFO", "Server-Figur versteckt (unsichtbar, ohne Kollision" .. (parked and ", 100 m hoch geparkt" or "")
+            .. (perception > 0 and ", für NPCs/Polizei abgemeldet" or ", keine KI-Wahrnehmung gefunden") .. ")")
+    end
+end
+
+-- Mitspieler: Namensschilder (WidgetComponents) versteckter Figuren ausblenden. Das Verstecken (bHidden) überträgt
+-- das Spiel vom Server; die Namensmarkierung zeichnet aber jeder Client selbst, teils auch durch Wände.
+local hiddenWidgets = {}
+local function HideMarkersOfHiddenPawns(place)
+    if ROLE == "server" or place ~= "world" then return end
+    for _, comp in ipairs(FindAllOf("WidgetComponent") or {}) do
+        if IsLive(comp) then
+            local id = comp:GetAddress()
+            if not hiddenWidgets[id] then
+                local okOwner, owner = pcall(function() return comp:GetOwner() end)
+                if okOwner and owner and owner:IsValid() then
+                    local okHidden, isHidden = pcall(function() return owner.bHidden end)
+                    if okHidden and isHidden == true then
+                        pcall(function() comp:SetVisibility(false, true) end)
+                        pcall(function() comp:SetHiddenInGame(true, true) end)
+                        hiddenWidgets[id] = true
+                        Log("Namensschild einer versteckten Figur ausgeblendet")
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function Tick()
     local pc = LocalController()
     local place = Place(pc)
     ApplyMaxFps(pc, place)
+    local okHide, errHide = pcall(HideHostCharacter, pc, place)
+    if not okHide then Log("Server-Figur: " .. tostring(errHide)) end
+    local okMarkers, errMarkers = pcall(HideMarkersOfHiddenPawns, place)
+    if not okMarkers then Log("Namensschilder: " .. tostring(errMarkers)) end
     if Menu then
         local ok, err = pcall(Menu.Tick)
         if not ok then Log("Menü: " .. tostring(err)) end

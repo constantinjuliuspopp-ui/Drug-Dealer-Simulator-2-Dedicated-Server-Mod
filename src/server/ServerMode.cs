@@ -183,6 +183,7 @@ public static class ServerMode
             var env = new Dictionary<string, string>();
             if (world != null) env["DDS2_WORLD"] = world.Alias;
             if (cfg.TickRate > 0) env["DDS2_MAX_FPS"] = cfg.TickRate.ToString();
+            if (cfg.HideServerCharacter) env["DDS2_HIDE_HOST"] = "1";
 
             var started = DateTime.Now;
             var game = _game = GameProcess.Launch(gameDir, "server", _ipc.Dir, gameArgs, env);
