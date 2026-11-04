@@ -162,6 +162,7 @@ local function FindFunction(obj, name)
 end
 
 local Menu -- menu.lua, wird weiter unten geladen
+local UnfreezeForCommand -- Server: angehaltene Welt für save/stop kurz weiterlaufen lassen (weiter unten gesetzt)
 
 local CPF_Parm, CPF_ReturnParm = 0x80, 0x400
 
@@ -545,6 +546,7 @@ local function HandleCommand(line)
     local cmd, arg = line:match("^%s*(%S+)%s*(.-)%s*$")
     if not cmd then return end
     cmd = cmd:lower()
+    if (cmd == "save" or cmd == "stop") and UnfreezeForCommand then UnfreezeForCommand(cmd) end
     if cmd == "save" then DoSave()
     elseif cmd == "kick" then DoKick(arg)
     elseif cmd == "stop" then DoStop()
@@ -599,7 +601,7 @@ local function GameLoop(ms, name, fn)
     end
 end
 
-local function WriteStatus(pc, mode, place)
+local function WriteStatus(pc, mode, place, paused)
     local lines = {
         "version=" .. MOD_VERSION,
         "role=" .. ROLE,
@@ -607,6 +609,7 @@ local function WriteStatus(pc, mode, place)
         "place=" .. place,
         "time=" .. os.time(),
     }
+    if paused then table.insert(lines, "paused=1") end
     if mode ~= "loading" then
         -- eigener Spieler (beim Server der Host-Charakter), damit der Launcher ihn nicht als Mitspieler zählt
         local okSelf, selfName = pcall(function() return PlayerName(pc.PlayerState) end)
@@ -998,6 +1001,89 @@ local function HideMarkersOfHiddenPawns(place)
     end
 end
 
+--[[ Dedicated Server: ohne Mitspieler die Welt anhalten (Pause der Engine), damit Uhrzeit, Wirtschaft, NPCs und
+     Polizei nicht weiterlaufen. Ablauf: niemand außer dem Server da -> nach DDS2_PAUSE_EMPTY Sekunden speichern ->
+     5 s später anhalten. Tritt jemand bei, taucht sein PlayerState schon während der Anmeldung auf (Netzwerk läuft
+     auch in der Pause weiter) und die Welt läuft beim nächsten Tick (≤ 2 s) weiter. Nur in der Server-Rolle. ]]
+local PAUSE_EMPTY = ROLE == "server" and tonumber(os.getenv("DDS2_PAUSE_EMPTY") or "") or nil
+local freeze = { emptySince = nil, savedAt = nil, paused = false, off = false }
+
+local function GameplayStatics()
+    return StaticFindObject("/Script/Engine.Default__GameplayStatics")
+end
+
+local function SetPaused(pc, paused)
+    local ok, err = pcall(function() GameplayStatics():SetGamePaused(pc, paused) end)
+    if not ok then
+        Log("SetGamePaused: " .. tostring(err))
+        return false
+    end
+    local okNow, now = pcall(function() return GameplayStatics():IsGamePaused(pc) end)
+    return not okNow or now == paused
+end
+
+-- Mitspieler = alle aktiven PlayerStates außer dem eigenen. Wer gegangen ist, bleibt eine Weile als "inaktiv" stehen.
+local function ActiveOthers(pc)
+    local selfId
+    pcall(function() selfId = Addr(pc.PlayerState) end)
+    local count = 0
+    for _, ps in ipairs(FindAllOf("PlayerState") or {}) do
+        if IsLive(ps) and Addr(ps) ~= selfId then
+            local okInactive, inactive = pcall(function() return ps.bIsInactive end)
+            local okSpec, spectator = pcall(function() return ps.bOnlySpectator end)
+            if not (okInactive and inactive == true) and not (okSpec and spectator == true) then count = count + 1 end
+        end
+    end
+    return count
+end
+
+local function Unfreeze(pc, reason)
+    if freeze.paused and SetPaused(pc, false) then Event("INFO", reason .. " – Welt läuft weiter") end
+    freeze.paused, freeze.emptySince, freeze.savedAt = false, nil, nil
+end
+
+local function FreezeTick(pc, place, mode)
+    if not PAUSE_EMPTY or PAUSE_EMPTY <= 0 or freeze.off or not pc then return end
+    if place ~= "world" or mode ~= "host" then
+        if freeze.paused then Unfreeze(pc, "Welt verlassen") end
+        freeze.emptySince, freeze.savedAt = nil, nil
+        return
+    end
+    if ActiveOthers(pc) > 0 then
+        if freeze.paused then Unfreeze(pc, "Mitspieler da") end
+        freeze.emptySince, freeze.savedAt = nil, nil
+        return
+    end
+    local now = os.time()
+    if freeze.paused then
+        -- falls etwas die Pause aufgehoben hat: wieder anhalten
+        local okNow, isPaused = pcall(function() return GameplayStatics():IsGamePaused(pc) end)
+        if okNow and isPaused == false then SetPaused(pc, true) end
+        return
+    end
+    freeze.emptySince = freeze.emptySince or now
+    if not freeze.savedAt and now - freeze.emptySince >= PAUSE_EMPTY then
+        Event("INFO", "Keine Mitspieler – speichere und friere die Welt ein ...")
+        DoSave()
+        freeze.savedAt = now
+    elseif freeze.savedAt and now - freeze.savedAt >= 5 then
+        if SetPaused(pc, true) then
+            freeze.paused = true
+            Event("INFO", "Welt eingefroren (keine Mitspieler) – läuft weiter, sobald jemand beitritt")
+        else
+            Event("WARN", "Welt konnte nicht angehalten werden (SetGamePaused) – läuft weiter")
+            freeze.emptySince, freeze.savedAt = now + 300, nil -- in 5 Minuten erneut versuchen
+        end
+    end
+end
+
+UnfreezeForCommand = function(cmd)
+    if cmd == "stop" then freeze.off = true end -- Server wird beendet: nicht wieder einfrieren
+    if not freeze.paused then return end
+    Unfreeze(LocalController(), "Befehl vom Server")
+    freeze.emptySince = os.time() -- nach "save" wieder einfrieren, wenn weiter niemand da ist
+end
+
 local function Tick()
     local pc = LocalController()
     local place = Place(pc)
@@ -1005,6 +1091,8 @@ local function Tick()
     ApplyMaxFps(pc, place)
     local okHide, errHide = pcall(HideHostCharacter, pc, place)
     if not okHide then Log("Server-Figur: " .. tostring(errHide)) end
+    local okFreeze, errFreeze = pcall(FreezeTick, pc, place, NetMode(pc))
+    if not okFreeze then Log("Einfrieren: " .. tostring(errFreeze)) end
     local okMarkers, errMarkers = pcall(HideMarkersOfHiddenPawns, place)
     if not okMarkers then Log("Namensschilder: " .. tostring(errMarkers)) end
     if Menu then
@@ -1012,7 +1100,7 @@ local function Tick()
         if not ok then Log("Menü: " .. tostring(err)) end
     end
     if not IPC_DIR then return end
-    WriteStatus(pc, NetMode(pc), place)
+    WriteStatus(pc, NetMode(pc), place, freeze.paused)
     LoadTick(pc, place)
     LobbyTick(place)
 end

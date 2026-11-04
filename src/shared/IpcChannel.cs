@@ -4,7 +4,7 @@ namespace DDS2Mod.Shared;
 
 public sealed record ModEvent(string Time, string Level, string Text);
 
-public sealed record ModStatus(string Version, string Role, string Mode, DateTimeOffset Time, IReadOnlyList<(string Name, int Ping)> Players, string Place = "", string Self = "")
+public sealed record ModStatus(string Version, string Role, string Mode, DateTimeOffset Time, IReadOnlyList<(string Name, int Ping)> Players, string Place = "", string Self = "", bool Paused = false)
 {
     /// <summary>Alle Spieler außer dieser Instanz selbst (beim Server: die echten Mitspieler).</summary>
     public IEnumerable<(string Name, int Ping)> Others =>
@@ -74,6 +74,7 @@ public sealed class IpcChannel
         catch (IOException) { return null; }
 
         string version = "", role = "", mode = "", place = "", self = "";
+        var paused = false;
         long time = 0;
         var players = new List<(string, int)>();
         foreach (var line in lines)
@@ -89,6 +90,7 @@ public sealed class IpcChannel
                 case "mode": mode = value; break;
                 case "place": place = value; break;
                 case "self": self = value; break;
+                case "paused": paused = value == "1"; break;
                 case "time": long.TryParse(value, out time); break;
                 case "player":
                     var sep = value.LastIndexOf('|');
@@ -98,6 +100,6 @@ public sealed class IpcChannel
                     break;
             }
         }
-        return mode == "" ? null : new ModStatus(version, role, mode, DateTimeOffset.FromUnixTimeSeconds(time), players, place, self);
+        return mode == "" ? null : new ModStatus(version, role, mode, DateTimeOffset.FromUnixTimeSeconds(time), players, place, self, paused);
     }
 }

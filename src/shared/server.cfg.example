@@ -33,6 +33,10 @@ StartSteam=true
 # Die Figur des Server-Kontos (der Server ist im Spiel technisch ein Spieler) verstecken:
 # unsichtbar samt Namen, ohne Kollision, 100 m hoch geparkt, für NPCs/Polizei abgemeldet.
 HideServerCharacter=true
+# Ohne Mitspieler die Welt einfrieren: Uhrzeit, Wirtschaft, NPCs und Polizei stehen still, bis jemand beitritt.
+# Vorher wird gespeichert. FreezeDelaySeconds = Wartezeit nach dem letzten Mitspieler.
+FreezeWhenEmpty=true
+FreezeDelaySeconds=30
 # Spielordner (mit DrugDealerSimulator2.exe). Leer = automatisch über Steam suchen.
 # Bei Installation per SteamCMD hier den Ordner eintragen.
 GameDir=

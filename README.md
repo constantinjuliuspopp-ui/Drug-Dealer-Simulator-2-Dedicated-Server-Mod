@@ -3,7 +3,7 @@
 Direkt-IP-Multiplayer und Dedicated Server für **Drug Dealer Simulator 2** (Steam, Windows).
 Inoffizielle Fan-Mod, nicht von den Entwicklern des Spiels.
 
-> **Version 0.5.3 – Dedicated Server auf eigenem PC und Beitritt im Heimnetz im Spiel getestet.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
+> **Version 0.5.6 – Dedicated Server auf eigenem PC und Beitritt im Heimnetz im Spiel getestet; Einfrieren ohne Mitspieler neu.** Gebaut gegen Spiel-Build `23009320` (Unreal Engine 5.3).
 > Bitte Rückmeldung geben, was funktioniert und was nicht.
 
 ## Was die Mod kann
@@ -164,6 +164,8 @@ auf dem Server-PC. Ab dann liegen **Welt und Fortschritt auf dem Server**.
 | `TickRate` | Spiel-Takte pro Sekunde, Standard 30 (spart ~90 % CPU gegenüber unbegrenzt); 0 = unbegrenzt |
 | `StartSteam` | Steam unsichtbar starten, falls es nicht läuft (Standard `true`) |
 | `HideServerCharacter` | Figur des Server-Kontos unsichtbar samt Namensschild, ohne Kollision, 100 m hoch geparkt, für NPCs/Polizei abgemeldet (Standard `true`) |
+| `FreezeWhenEmpty` | Ist außer dem Server niemand da, wird gespeichert und die Welt angehalten: Uhrzeit, Wirtschaft, NPCs und Polizei stehen still, bis jemand beitritt (Standard `true`) |
+| `FreezeDelaySeconds` | Wartezeit nach dem letzten Mitspieler bis zum Einfrieren (Standard 30) |
 | `GameDir` | Spielordner, falls nicht automatisch gefunden |
 
 ### Automatisch starten

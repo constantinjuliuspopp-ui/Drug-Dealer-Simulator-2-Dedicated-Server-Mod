@@ -184,6 +184,7 @@ public static class ServerMode
             if (world != null) env["DDS2_WORLD"] = world.Alias;
             if (cfg.TickRate > 0) env["DDS2_MAX_FPS"] = cfg.TickRate.ToString();
             if (cfg.HideServerCharacter) env["DDS2_HIDE_HOST"] = "1";
+            if (cfg.FreezeWhenEmpty) env["DDS2_PAUSE_EMPTY"] = Math.Max(cfg.FreezeDelaySeconds, 1).ToString();
 
             var started = DateTime.Now;
             var game = _game = GameProcess.Launch(gameDir, "server", _ipc.Dir, gameArgs, env);
@@ -353,7 +354,8 @@ public static class ServerMode
 
             if (DateTime.Now >= nextAutosave)
             {
-                if (_status is { Mode: "host", Place: "world", IsStale: false }) { Log("INFO", "Autosave ..."); RequestSave(); }
+                // Eingefroren: nichts ändert sich, gespeichert wurde schon beim Einfrieren
+                if (_status is { Mode: "host", Place: "world", IsStale: false, Paused: false }) { Log("INFO", "Autosave ..."); RequestSave(); }
                 nextAutosave = DateTime.Now.AddMinutes(cfg.AutosaveMinutes);
             }
             CheckSaveWritten();
@@ -425,7 +427,7 @@ public static class ServerMode
     {
         var i = CurrentInfo();
         var up = DateTime.Now - StartedAt;
-        Log("INFO", $"Zustand: {StateText(i.State)} | Welt: {(i.World.Length > 0 ? i.World : "?")} | Mitspieler: {i.Players}/{i.MaxPlayers} | "
+        Log("INFO", $"Zustand: {StateText(i.State)}{(_status is { Paused: true, IsStale: false } ? ", eingefroren (keine Mitspieler)" : "")} | Welt: {(i.World.Length > 0 ? i.World : "?")} | Mitspieler: {i.Players}/{i.MaxPlayers} | "
             + $"Ports: Spiel {_cfg.Port}/UDP, Abfrage {_cfg.EffectiveQueryPort}/UDP | Laufzeit: {(int)up.TotalHours}:{up.Minutes:00} h");
         var s = _status;
         if (s != null && s.Version != ModInfo.Version)

@@ -24,6 +24,10 @@ public sealed class ServerConfig
     public bool StartSteam { get; set; } = true;
     /// <summary>Figur des Server-Kontos unsichtbar machen, parken und für NPCs/Polizei abmelden.</summary>
     public bool HideServerCharacter { get; set; } = true;
+    /// <summary>Ohne Mitspieler die Welt anhalten (Pause), damit Zeit, Wirtschaft und NPCs nicht weiterlaufen.</summary>
+    public bool FreezeWhenEmpty { get; set; } = true;
+    /// <summary>So lange nach dem letzten Mitspieler warten, dann speichern und einfrieren.</summary>
+    public int FreezeDelaySeconds { get; set; } = 30;
     public string GameDir { get; set; } = "";
 
     public int EffectiveQueryPort => QueryPort > 0 ? QueryPort : ServerQuery.DefaultQueryPort(Port);
@@ -77,6 +81,8 @@ public sealed class ServerConfig
             case "tickrate": TickRate = value == "0" ? 0 : ParseInt(value, 10, 240, where); break;
             case "startsteam": StartSteam = ParseBool(value, where); break;
             case "hideservercharacter": HideServerCharacter = ParseBool(value, where); break;
+            case "freezewhenempty": FreezeWhenEmpty = ParseBool(value, where); break;
+            case "freezedelayseconds": FreezeDelaySeconds = ParseInt(value, 0, 3600, where); break;
             case "gamedir": GameDir = value; break;
             default: throw new FormatException($"{where}: unbekannte Einstellung '{key}'");
         }

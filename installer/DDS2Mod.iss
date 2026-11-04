@@ -103,6 +103,7 @@ Type: filesandordirs; Name: "{code:ServerDir}\ipc"
 [Code]
 var
   GameDirPage: TInputDirWizardPage;
+  GameDirFound: Boolean;
   UninstGameDir: String;
 
 // Liefert den Index-ten Wert in Anführungszeichen einer VDF-Zeile ("key" "value" -> 2 = value).
@@ -158,6 +159,69 @@ begin
       end;
 end;
 
+function IsGameDir(const Dir: String): Boolean;
+begin
+  Result := (Dir <> '') and FileExists(AddBackslash(Dir) + 'DrugDealerSimulator2.exe');
+end;
+
+// Läuft Drug Dealer Simulator 2? Gezielt nach dem Prozess fragen – ein "UnrealWindow" haben auch andere
+// Unreal-Programme wie der Epic Games Launcher.
+function IsGameRunning(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{cmd}'),
+    '/C tasklist /FI "IMAGENAME eq DrugDealerSimulator2-Win64-Shipping.exe" /NH | find /I "DrugDealerSimulator2" >nul',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+// Eintrag "Steam App 1708850" unter Programme und Features
+function UninstallLocation(): String;
+var
+  Key: String;
+begin
+  Result := '';
+  Key := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 1708850';
+  if not RegQueryStringValue(HKLM64, Key, 'InstallLocation', Result) then
+    if not RegQueryStringValue(HKLM32, Key, 'InstallLocation', Result) then
+      Result := '';
+  if not IsGameDir(Result) then Result := '';
+end;
+
+// Letzter Ausweg: übliche Steam-Ordner auf allen Laufwerken
+function ScanDrives(): String;
+var
+  D, K: Integer;
+  Drive, Dir: String;
+  Candidates: TArrayOfString;
+begin
+  Result := '';
+  SetArrayLength(Candidates, 9);
+  Candidates[0] := 'SteamLibrary';
+  Candidates[1] := 'Steam';
+  Candidates[2] := 'Program Files (x86)\Steam';
+  Candidates[3] := 'Program Files\Steam';
+  Candidates[4] := 'Games\Steam';
+  Candidates[5] := 'Games\SteamLibrary';
+  Candidates[6] := 'Spiele\Steam';
+  Candidates[7] := 'Spiele\SteamLibrary';
+  Candidates[8] := 'Steam\SteamLibrary';
+  for D := Ord('C') to Ord('Z') do
+  begin
+    Drive := Chr(D) + ':\';
+    if DirExists(Drive) then
+      for K := 0 to GetArrayLength(Candidates) - 1 do
+      begin
+        Dir := Drive + Candidates[K] + '\steamapps\common\Drug Dealer Simulator 2';
+        if IsGameDir(Dir) then
+        begin
+          Result := Dir;
+          Exit;
+        end;
+      end;
+  end;
+end;
+
 // Sucht das Spiel über Steam-Registry und libraryfolders.vdf.
 function FindGameDir(): String;
 var
@@ -171,6 +235,7 @@ begin
   try
     if RegQueryStringValue(HKCU, 'Software\Valve\Steam', 'SteamPath', Root) then AddLibrary(Libs, Root);
     if RegQueryStringValue(HKLM32, 'SOFTWARE\Valve\Steam', 'InstallPath', Root) then AddLibrary(Libs, Root);
+    if RegQueryStringValue(HKLM64, 'SOFTWARE\Valve\Steam', 'InstallPath', Root) then AddLibrary(Libs, Root);
     RootCount := Libs.Count;
     for I := 0 to RootCount - 1 do
       if LoadStringsFromFile(AddBackslash(Libs[I]) + 'steamapps\libraryfolders.vdf', Lines) then
@@ -183,7 +248,7 @@ begin
       if FileExists(Manifest) then
       begin
         Dir := AddBackslash(Libs[I]) + 'steamapps\common\' + ReadInstallDir(Manifest);
-        if FileExists(AddBackslash(Dir) + 'DrugDealerSimulator2.exe') then
+        if IsGameDir(Dir) then
         begin
           Result := Dir;
           Exit;
@@ -193,6 +258,8 @@ begin
   finally
     Libs.Free;
   end;
+  if Result = '' then Result := UninstallLocation();
+  if Result = '' then Result := ScanDrives();
 end;
 
 procedure InitializeWizard;
@@ -205,11 +272,30 @@ begin
     + ' Für einen Server, dessen Spiel per SteamCMD installiert wurde (install_server.bat), dessen Ordner wählen, z. B. C:\DDS2Server\game.',
     False, '');
   GameDirPage.Add('Spielordner:');
-  Found := FindGameDir();
-  // Per install_server.bat (SteamCMD) installiertes Spiel
-  if (Found = '') and FileExists(ExpandConstant('{sd}\DDS2Server\game\DrugDealerSimulator2.exe')) then
+  // Reihenfolge: Ordner der letzten Installation (wenn es ihn noch gibt), Steam, per SteamCMD installiertes Spiel
+  Found := GetPreviousData('GameDir', '');
+  if not IsGameDir(Found) then Found := FindGameDir();
+  if (Found = '') and IsGameDir(ExpandConstant('{sd}\DDS2Server\game')) then
     Found := ExpandConstant('{sd}\DDS2Server\game');
-  GameDirPage.Values[0] := GetPreviousData('GameDir', Found);
+  GameDirPage.Values[0] := Found;
+  GameDirFound := Found <> '';
+end;
+
+// Spielordner automatisch gefunden: Seite überspringen (der Ordner steht dann in der Zusammenfassung).
+// Bei "Dedicated Server" bleibt sie sichtbar, weil das Spiel dort oft per SteamCMD woanders liegt.
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (PageID = GameDirPage.ID) and GameDirFound and not WizardIsComponentSelected('server');
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo,
+  MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := MemoDirInfo + NewLine + NewLine
+    + 'Spielordner (automatisch gefunden):' + NewLine + Space + GameDirPage.Values[0] + NewLine + NewLine
+    + MemoTypeInfo + NewLine + NewLine + MemoComponentsInfo;
+  if MemoGroupInfo <> '' then Result := Result + NewLine + NewLine + MemoGroupInfo;
+  if MemoTasksInfo <> '' then Result := Result + NewLine + NewLine + MemoTasksInfo;
 end;
 
 procedure RegisterPreviousData(PreviousDataKey: Integer);
@@ -222,15 +308,17 @@ begin
   Result := True;
   if CurPageID = GameDirPage.ID then
   begin
-    if not FileExists(AddBackslash(GameDirPage.Values[0]) + 'DrugDealerSimulator2.exe') then
+    if not IsGameDir(GameDirPage.Values[0]) then
     begin
       MsgBox('In diesem Ordner liegt keine DrugDealerSimulator2.exe. Bitte den Spielordner auswählen.', mbError, MB_OK);
       Result := False;
-    end else if FindWindowByClassName('UnrealWindow') <> 0 then
-    begin
-      MsgBox('Ein Unreal-Spiel läuft gerade (vermutlich Drug Dealer Simulator 2). Bitte beenden und dann erneut auf "Weiter" klicken.', mbError, MB_OK);
-      Result := False;
     end;
+  end;
+  // Erst direkt vor dem Installieren prüfen (die Ordner-Seite wird oft übersprungen)
+  if (CurPageID = wpReady) and IsGameRunning() then
+  begin
+    MsgBox('Drug Dealer Simulator 2 läuft gerade. Bitte das Spiel beenden und dann erneut auf "Installieren" klicken.', mbError, MB_OK);
+    Result := False;
   end;
 end;
 
@@ -304,7 +392,7 @@ var
   S: AnsiString;
 begin
   Result := True;
-  if FindWindowByClassName('UnrealWindow') <> 0 then
+  if IsGameRunning() then
   begin
     MsgBox('Bitte zuerst Drug Dealer Simulator 2 beenden.', mbError, MB_OK);
     Result := False;

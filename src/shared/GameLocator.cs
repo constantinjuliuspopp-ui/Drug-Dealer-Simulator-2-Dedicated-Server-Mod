@@ -40,7 +40,26 @@ public static class GameLocator
             var dir = Path.Combine(lib, "steamapps", "common", installDir);
             if (IsGameDir(dir)) return dir;
         }
-        return null;
+
+        // Eintrag "Steam App 1708850" unter Programme und Features
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            using var key = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view)
+                .OpenSubKey($@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App {ModInfo.SteamAppId}");
+            if (key?.GetValue("InstallLocation") is string location && IsGameDir(location)) return location;
+        }
+
+        // Letzter Ausweg: übliche Steam-Ordner auf allen Festplatten, dann ein per SteamCMD installiertes Spiel
+        string[] candidates = { "SteamLibrary", "Steam", @"Program Files (x86)\Steam", @"Program Files\Steam", @"Games\Steam",
+            @"Games\SteamLibrary", @"Spiele\Steam", @"Spiele\SteamLibrary", @"Steam\SteamLibrary" };
+        foreach (var drive in DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady))
+            foreach (var c in candidates)
+            {
+                var dir = Path.Combine(drive.RootDirectory.FullName, c, "steamapps", "common", "Drug Dealer Simulator 2");
+                if (IsGameDir(dir)) return dir;
+            }
+        var steamCmd = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\", "DDS2Server", "game");
+        return IsGameDir(steamCmd) ? steamCmd : null;
     }
 
     /// <summary>Steam-Build-ID aus appmanifest_1708850.acf (liegt zwei Ebenen über dem Spielordner), "" wenn unbekannt.</summary>
